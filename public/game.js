@@ -11,6 +11,12 @@ let targetBall = { x: 700, y: 450 }
 let boostPads = [] 
 let keys = {}
 
+// VARIABLES DE FÍSICA LOCAL PARA PREDICCIÓN
+let localVelX = 0;
+let localVelY = 0;
+const friction = 0.92; // Debe ser igual a la del server.js
+const acc = 0.8;       // Aceleración
+
 // SOPORTE MÓVIL
 let joystick = { active: false, x: 0, y: 0, startX: 0, startY: 0 };
 let touchInput = { w: false, s: false, a: false, d: false, shift: false };
@@ -30,7 +36,7 @@ document.addEventListener("keyup", (e) => {
     keys[key] = false;
 });
 
-// Touch Events
+// Touch Events (Joystick)
 canvas.addEventListener("touchstart", (e) => {
     const touch = e.touches[0];
     const rect = canvas.getBoundingClientRect();
@@ -82,24 +88,32 @@ function drawPlayers() {
         if (p.x === undefined || isNaN(p.x)) { p.x = p.targetX || 700; p.y = p.targetY || 450; }
 
         if (p.id === socket.id) {
-            // Predicción local más conservadora para evitar el 'disparo'
-            // Reducimos un poco la velocidad visual para que el servidor la alcance rápido
-            let speed = (keys['shift'] || touchInput.shift) && p.boost > 0 ? 7.5 : 4.5; 
-            if (keys['w'] || touchInput.w) p.y -= speed;
-            if (keys['s'] || touchInput.s) p.y += speed;
-            if (keys['a'] || touchInput.a) p.x -= speed;
-            if (keys['d'] || touchInput.d) p.x += speed;
+            // --- PREDICCIÓN CON FRICCIÓN SIMULADA ---
+            let moveX = 0; let moveY = 0;
+            if (keys['w'] || touchInput.w) moveY -= 1;
+            if (keys['s'] || touchInput.s) moveY += 1;
+            if (keys['a'] || touchInput.a) moveX -= 1;
+            if (keys['d'] || touchInput.d) moveX += 1;
 
-            // RECONCILIACIÓN FUERTE: Si la diferencia es mucha, saltamos a la posición real
-            let dist = Math.hypot(p.x - p.targetX, p.y - p.targetY);
-            if (dist > 50) {
+            // Aplicar aceleración y fricción
+            let currentAcc = (keys['shift'] || touchInput.shift) && p.boost > 0 ? acc * 1.8 : acc;
+            localVelX += moveX * currentAcc;
+            localVelY += moveY * currentAcc;
+            localVelX *= friction;
+            localVelY *= friction;
+
+            p.x += localVelX;
+            p.y += localVelY;
+
+            // Reconciliación suave con el servidor
+            p.x += (p.targetX - p.x) * 0.15;
+            p.y += (p.targetY - p.y) * 0.15;
+            
+            // Si la diferencia es masiva (lag spike), teletransportar
+            if(Math.hypot(p.x - p.targetX, p.y - p.targetY) > 80) {
                 p.x = p.targetX; p.y = p.targetY;
-            } else {
-                p.x += (p.targetX - p.x) * 0.2; // Suavizado de corrección
-                p.y += (p.targetY - p.y) * 0.2;
             }
         } else {
-            // Jugadores remotos: Interpolación normal
             p.x += (p.targetX - p.x) * 0.4;
             p.y += (p.targetY - p.y) * 0.4;
         }
@@ -115,20 +129,16 @@ function drawPlayers() {
 }
 
 function drawBall() {
-    // Si el balón está lejos, suavizamos. Si está cerca, somos más reactivos
     let distToMe = 1000;
     const myPlayer = players.find(p => p.id === socket.id);
     if(myPlayer) distToMe = Math.hypot(ball.x - myPlayer.x, ball.y - myPlayer.y);
 
-    // Ajuste dinámico de suavizado: más rápido si está cerca del jugador
-    let lerpFactor = distToMe < 60 ? 0.8 : 0.4; 
+    let lerpFactor = distToMe < 70 ? 0.8 : 0.3; 
     ball.x += (targetBall.x - ball.x) * lerpFactor;
     ball.y += (targetBall.y - ball.y) * lerpFactor;
 
-    ctx.beginPath();
-    ctx.fillStyle = "white";
-    ctx.arc(ball.x, ball.y, 10, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.fillStyle = "white";
+    ctx.arc(ball.x, ball.y, 10, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "black"; ctx.stroke();
 }
 
@@ -136,8 +146,7 @@ function drawBoostUI() {
     const myPlayer = players.find(p => p.id === socket.id);
     if (!myPlayer || myPlayer.boost === undefined) return;
     const x = 1300, y = 800, radius = 60;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.strokeStyle = "rgba(0, 0, 0, 0.4)"; ctx.lineWidth = 12; ctx.stroke();
     const boostPerc = myPlayer.boost / 100;
     ctx.beginPath();
@@ -189,10 +198,8 @@ function updateSidePanels() {
 
 setInterval(() => {
     socket.emit("move", { 
-        w: keys["w"] || touchInput.w, 
-        a: keys["a"] || touchInput.a, 
-        s: keys["s"] || touchInput.s, 
-        d: keys["d"] || touchInput.d, 
+        w: keys["w"] || touchInput.w, a: keys["a"] || touchInput.a, 
+        s: keys["s"] || touchInput.s, d: keys["d"] || touchInput.d, 
         shift: keys["shift"] || touchInput.shift 
     });
 }, 1000 / 60);
