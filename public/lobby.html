@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Lobby</title>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<h1 class="title">CHAMPIONS FIELD</h1>
+
+<div class="lobby">
+
+<div class="team">
+
+<h2 onclick="joinTeam('red')" class="redText">ROJO</h2>
+
+<div id="redPlayers"></div>
+
+</div>
+
+
+<div class="field">
+
+<img src="assets/field.png">
+
+</div>
+
+
+<div class="team">
+
+<h2 onclick="joinTeam('blue')" class="blueText">AZUL</h2>
+
+<div id="bluePlayers"></div>
+
+</div>
+
+</div>
+
+<div class="roomCode">
+
+ROOM: <span id="roomCode"></span>
+
+<br><br>
+
+<button onclick="startGame()">INICIAR PARTIDA</button>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="lobby.js"></script>
+
+</body>
+</html>
