@@ -5,8 +5,7 @@ const io = require("socket.io")(http)
 
 app.use(express.static("public"))
 
-// CAMBIO CLAVE: Render elige el puerto, si no existe usa el 3000
-const PORT = process.env.PORT || 3000
+const PORT = 3000
 http.listen(PORT, () => console.log("Servidor corriendo en puerto", PORT))
 
 let rooms = {}
