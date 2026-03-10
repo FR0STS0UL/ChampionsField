@@ -11,11 +11,11 @@ let targetBall = { x: 700, y: 450 }
 let boostPads = [] 
 let keys = {}
 
-// VARIABLES DE FÍSICA LOCAL CALIBRADAS
+// VARIABLES DE FÍSICA LOCAL (Sincronizadas con el servidor)
 let localVelX = 0;
 let localVelY = 0;
 const friction = 0.89; 
-const acc = 0.8;       
+const baseAcc = 0.5; // Coincide con accel del server
 
 // SOPORTE MÓVIL
 let joystick = { active: false, x: 0, y: 0, startX: 0, startY: 0 };
@@ -36,7 +36,7 @@ document.addEventListener("keyup", (e) => {
     keys[key] = false;
 });
 
-// Touch Events (Joystick mejorado)
+// Touch Events
 canvas.addEventListener("touchstart", (e) => {
     const touch = e.touches[0];
     const rect = canvas.getBoundingClientRect();
@@ -70,12 +70,12 @@ socket.on("state", (state) => {
         if (localPlayer) {
             localPlayer.targetX = serverPlayer.x;
             localPlayer.targetY = serverPlayer.y;
-            localPlayer.boost = serverPlayer.boost; // Recibimos boost del servidor
+            localPlayer.boost = serverPlayer.boost;
             localPlayer.team = serverPlayer.team;
         }
     });
     targetBall = state.ball;
-    boostPads = state.boostPads || []; // Recibimos los pads del servidor
+    boostPads = state.boostPads || [];
 });
 
 socket.on("playerInfoUpdate", (fullPlayerData) => {
@@ -94,7 +94,9 @@ function drawPlayers() {
             if (keys['a'] || touchInput.a) moveX -= 1;
             if (keys['d'] || touchInput.d) moveX += 1;
 
-            let currentAcc = (keys['shift'] || touchInput.shift) && p.boost > 0 ? acc * 1.8 : acc;
+            let isBoosting = (keys['shift'] || touchInput.shift) && p.boost > 0;
+            let currentAcc = isBoosting ? 1.2 : baseAcc;
+            
             localVelX += moveX * currentAcc;
             localVelY += moveY * currentAcc;
             localVelX *= friction;
@@ -103,17 +105,16 @@ function drawPlayers() {
             p.x += localVelX;
             p.y += localVelY;
 
-            // Interpolación para corregir desincronización leve
+            // Interpolación de corrección
             p.x += (p.targetX - p.x) * 0.15;
             p.y += (p.targetY - p.y) * 0.15;
             
-            if(Math.hypot(p.x - p.targetX, p.y - p.targetY) > 80) {
+            if(Math.hypot(p.x - p.targetX, p.y - p.targetY) > 60) {
                 p.x = p.targetX; p.y = p.targetY;
             }
         } else {
-            // Suavizado para otros jugadores
-            p.x += (p.targetX - p.x) * 0.4;
-            p.y += (p.targetY - p.y) * 0.4;
+            p.x += (p.targetX - p.x) * 0.35;
+            p.y += (p.targetY - p.y) * 0.35;
         }
 
         ctx.save();
@@ -123,7 +124,6 @@ function drawPlayers() {
         ctx.fill();
         ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
         
-        // Renderizado de nombre y título
         ctx.textAlign = "center";
         ctx.fillStyle = "white";
         ctx.font = "bold 14px Segoe UI";
@@ -142,7 +142,6 @@ function drawBall() {
     const myPlayer = players.find(p => p.id === socket.id);
     if(myPlayer) distToMe = Math.hypot(ball.x - myPlayer.x, ball.y - myPlayer.y);
 
-    // Si la pelota está cerca, la reacción es más rápida (menos lag visual)
     let lerpFactor = distToMe < 70 ? 0.8 : 0.3; 
     ball.x += (targetBall.x - ball.x) * lerpFactor;
     ball.y += (targetBall.y - ball.y) * lerpFactor;
@@ -156,38 +155,35 @@ function drawBoostUI() {
     const myPlayer = players.find(p => p.id === socket.id);
     if (!myPlayer || myPlayer.boost === undefined) return;
     
-    // Posición dinámica basada en el canvas
-    const x = canvas.width - 110, y = canvas.height - 110, radius = 70;
+    // UI más pequeño (radius 55)
+    const x = canvas.width - 80, y = canvas.height - 80, radius = 55;
     const boostPerc = myPlayer.boost / 100;
 
     ctx.save();
-    // Sombra/Fondo del medidor
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
     ctx.fill();
 
-    // Aro de progreso (Naranja neón)
     ctx.beginPath();
-    ctx.lineWidth = 8;
+    ctx.lineWidth = 6;
     ctx.strokeStyle = "#333";
     ctx.arc(x, y, radius - 5, 0, Math.PI * 2);
     ctx.stroke();
 
     ctx.beginPath();
     ctx.strokeStyle = "#ff8c00";
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 10;
     ctx.shadowColor = "#ff8c00";
     ctx.lineCap = "round";
     ctx.arc(x, y, radius - 5, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * boostPerc));
     ctx.stroke();
 
-    // Texto
     ctx.shadowBlur = 0;
     ctx.fillStyle = "white";
-    ctx.font = "bold 38px Segoe UI";
+    ctx.font = "bold 28px Segoe UI";
     ctx.textAlign = "center";
-    ctx.fillText(Math.floor(myPlayer.boost), x, y + 15);
+    ctx.fillText(Math.floor(myPlayer.boost), x, y + 10);
     ctx.restore();
 }
 
@@ -196,20 +192,19 @@ function draw() {
     if (fieldImg.complete) ctx.drawImage(fieldImg, 0, 0, 1400, 900);
     else { ctx.fillStyle = "#0a1a0a"; ctx.fillRect(0, 0, 1400, 900); }
     
-    // Dibujar Boost Pads
     boostPads.forEach(pad => {
         if (!pad.active) return;
         ctx.save();
         ctx.beginPath();
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 12;
         if (pad.type === 'big') {
             ctx.shadowColor = "#ff8c00";
             ctx.fillStyle = "rgba(255, 140, 0, 0.8)";
-            ctx.arc(pad.x, pad.y, 25, 0, Math.PI * 2);
+            ctx.arc(pad.x, pad.y, 18, 0, Math.PI * 2);
         } else {
-            ctx.shadowColor = "#00ffcc";
-            ctx.fillStyle = "rgba(0, 255, 204, 0.5)";
-            ctx.arc(pad.x, pad.y, 12, 0, Math.PI * 2);
+            ctx.shadowColor = "#ffcc00"; // AMARILLO
+            ctx.fillStyle = "rgba(255, 204, 0, 0.7)"; // AMARILLO
+            ctx.arc(pad.x, pad.y, 8, 0, Math.PI * 2);
         }
         ctx.fill();
         ctx.restore();

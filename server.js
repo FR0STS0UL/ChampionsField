@@ -10,18 +10,23 @@ http.listen(PORT, () => console.log("Servidor corriendo en puerto", PORT));
 
 let rooms = {};
 
-// --- CONFIGURACIÓN DE BOOST PADS ---
+// --- CONFIGURACIÓN DE BOOST PADS ACTUALIZADA ---
 const BOOST_PADS = [
+    // Big Pads (100)
     { x: 100, y: 100, type: 'big', value: 100 },
     { x: 1300, y: 100, type: 'big', value: 100 },
     { x: 100, y: 800, type: 'big', value: 100 },
     { x: 1300, y: 800, type: 'big', value: 100 },
     { x: 700, y: 80, type: 'big', value: 100 },
     { x: 700, y: 820, type: 'big', value: 100 },
-    { x: 400, y: 250, type: 'small', value: 12 },
-    { x: 1000, y: 250, type: 'small', value: 12 },
-    { x: 400, y: 650, type: 'small', value: 12 },
-    { x: 1000, y: 650, type: 'small', value: 12 }
+    // Mini Pads (12) - Más cantidad
+    { x: 400, y: 450, type: 'small', value: 12 },
+    { x: 1000, y: 450, type: 'small', value: 12 },
+    { x: 700, y: 450, type: 'small', value: 12 },
+    { x: 550, y: 250, type: 'small', value: 12 },
+    { x: 850, y: 250, type: 'small', value: 12 },
+    { x: 550, y: 650, type: 'small', value: 12 },
+    { x: 850, y: 650, type: 'small', value: 12 }
 ];
 
 function makeCode() {
@@ -65,7 +70,7 @@ io.on("connection", (socket) => {
                 y: 450,
                 vx: 0,
                 vy: 0,
-                boost: 33, // Empiezan con algo de boost
+                boost: 33,
                 input: {}
             });
         }
@@ -90,14 +95,13 @@ io.on("connection", (socket) => {
 setInterval(() => {
     for (const code in rooms) {
         const room = rooms[code];
-        const friction = 0.85;
-        const maxSpeed = 5;
+        const friction = 0.89;
 
         room.players.forEach(p => {
-            // Lógica de Boost
             let isBoosting = p.input.shift && p.boost > 0;
             const accel = isBoosting ? 1.2 : 0.5;
-            if (isBoosting) p.boost -= 0.4;
+            
+            if (isBoosting) p.boost -= 0.35;
 
             if (p.input.w) p.vy -= accel;
             if (p.input.s) p.vy += accel;
@@ -105,9 +109,11 @@ setInterval(() => {
             if (p.input.d) p.vx += accel;
 
             p.vx *= friction; p.vy *= friction;
+            
+            // Límite de velocidad
             let speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-            if (speed > (isBoosting ? 9 : maxSpeed)) {
-                let limit = isBoosting ? 9 : maxSpeed;
+            let limit = isBoosting ? 9 : 5.2;
+            if (speed > limit) {
                 p.vx = (p.vx / speed) * limit;
                 p.vy = (p.vy / speed) * limit;
             }
@@ -116,7 +122,6 @@ setInterval(() => {
             p.x = Math.max(15, Math.min(1385, p.x));
             p.y = Math.max(15, Math.min(885, p.y));
 
-            // Colisión con Boost Pads
             room.boostPads.forEach(pad => {
                 if (pad.active && Math.hypot(p.x - pad.x, p.y - pad.y) < 35) {
                     p.boost = Math.min(100, p.boost + pad.value);
@@ -126,7 +131,6 @@ setInterval(() => {
             });
         });
 
-        // Regenerar Pads
         room.boostPads.forEach(pad => {
             if (!pad.active) {
                 pad.timer--;
@@ -134,21 +138,21 @@ setInterval(() => {
             }
         });
 
-        // Física de la pelota
         room.ball.x += room.ball.vx; room.ball.y += room.ball.vy;
         room.ball.vx *= 0.985; room.ball.vy *= 0.985;
 
-        if (room.ball.x < 10 || room.ball.x > 1390) room.ball.vx *= -1.2;
-        if (room.ball.y < 10 || room.ball.y > 890) room.ball.vy *= -1.2;
+        if (room.ball.x < 10) { room.ball.vx *= -1.2; room.ball.x = 10; }
+        if (room.ball.x > 1390) { room.ball.vx *= -1.2; room.ball.x = 1390; }
+        if (room.ball.y < 10) { room.ball.vy *= -1.2; room.ball.y = 10; }
+        if (room.ball.y > 890) { room.ball.vy *= -1.2; room.ball.y = 890; }
 
-        // Colisión Jugador-Pelota
         room.players.forEach(p => {
             let dx = room.ball.x - p.x;
             let dy = room.ball.y - p.y;
             let dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < 25) {
                 let nx = dx / dist; let ny = dy / dist;
-                room.ball.vx += nx * 0.6; room.ball.vy += ny * 0.6;
+                room.ball.vx += nx * 0.8; room.ball.vy += ny * 0.8;
             }
         });
 
