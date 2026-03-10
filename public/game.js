@@ -14,7 +14,7 @@ let keys = {}
 // VARIABLES DE FÍSICA LOCAL CALIBRADAS
 let localVelX = 0;
 let localVelY = 0;
-const friction = 0.89; // Bajamos de 0.92 a 0.89 para que frene más rápido localmente
+const friction = 0.89; 
 const acc = 0.8;       
 
 // SOPORTE MÓVIL
@@ -88,7 +88,6 @@ function drawPlayers() {
         if (p.x === undefined || isNaN(p.x)) { p.x = p.targetX || 700; p.y = p.targetY || 450; }
 
         if (p.id === socket.id) {
-            // --- PREDICCIÓN CON FRICCIÓN AJUSTADA ---
             let moveX = 0; let moveY = 0;
             if (keys['w'] || touchInput.w) moveY -= 1;
             if (keys['s'] || touchInput.s) moveY += 1;
@@ -104,7 +103,6 @@ function drawPlayers() {
             p.x += localVelX;
             p.y += localVelY;
 
-            // Reconciliación con el servidor
             p.x += (p.targetX - p.x) * 0.15;
             p.y += (p.targetY - p.y) * 0.15;
             
@@ -143,16 +141,32 @@ function drawBall() {
 function drawBoostUI() {
     const myPlayer = players.find(p => p.id === socket.id);
     if (!myPlayer || myPlayer.boost === undefined) return;
-    const x = 1300, y = 800, radius = 60;
-    ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.4)"; ctx.lineWidth = 12; ctx.stroke();
+    
+    const x = 1300, y = 800, radius = 65;
+    
+    // Fondo negro (lo que se va perdiendo)
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "black";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Círculo Naranja (cantidad de boost)
     const boostPerc = myPlayer.boost / 100;
     ctx.beginPath();
+    ctx.moveTo(x, y);
     ctx.arc(x, y, radius, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * boostPerc));
-    ctx.strokeStyle = myPlayer.boost > 25 ? "#ffae00" : "#ff3b3b";
-    ctx.lineWidth = 12; ctx.lineCap = "round"; ctx.stroke();
-    ctx.fillStyle = "white"; ctx.font = "bold 28px Segoe UI"; ctx.textAlign = "center";
-    ctx.fillText(Math.floor(myPlayer.boost), x, y + 10);
+    ctx.lineTo(x, y);
+    ctx.fillStyle = "#ff8c00"; 
+    ctx.fill();
+
+    // Texto central
+    ctx.fillStyle = "white";
+    ctx.font = "bold 32px Segoe UI";
+    ctx.textAlign = "center";
+    ctx.fillText(Math.floor(myPlayer.boost), x, y + 12);
 }
 
 function draw() {
@@ -160,14 +174,25 @@ function draw() {
     if (fieldImg.complete) ctx.drawImage(fieldImg, 0, 0, 1400, 900);
     else { ctx.fillStyle = "#1b7a2f"; ctx.fillRect(0, 0, 1400, 900); }
     
+    // Dibujar Boost Pads
     boostPads.forEach(pad => {
-        ctx.beginPath(); ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
-        ctx.arc(pad.x, pad.y, 25, 0, Math.PI * 2); ctx.fill();
+        if (!pad.active) return;
+        ctx.beginPath();
+        // Naranja brillante para los de 100 (big), amarillo suave para los de 12 (small)
+        ctx.fillStyle = pad.type === 'big' ? "rgba(255, 140, 0, 0.6)" : "rgba(255, 255, 0, 0.3)";
+        ctx.arc(pad.x, pad.y, pad.type === 'big' ? 30 : 15, 0, Math.PI * 2);
+        ctx.fill();
+        if(pad.type === 'big') {
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
     });
 
     drawPlayers();
     drawBall();
     drawBoostUI();
+    
     if (joystick.active) {
         ctx.beginPath(); ctx.arc(joystick.startX, joystick.startY, 50, 0, Math.PI * 2);
         ctx.strokeStyle = "rgba(255, 255, 255, 0.3)"; ctx.lineWidth = 3; ctx.stroke();
@@ -185,8 +210,6 @@ function updateSidePanels() {
     players.forEach(p => {
         const card = document.createElement("div");
         card.className = "playerCard";
-        
-        // PARCHE DE FOTOS DE PERFIL Y BANNERS
         card.innerHTML = `
             <div class="avatar-container">
                 <img src="${p.pfp || 'assets/default_pfp.png'}" class="pfp">
