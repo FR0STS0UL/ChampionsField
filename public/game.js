@@ -5,11 +5,17 @@ const ctx = canvas.getContext("2d")
 const fieldImg = new Image();
 fieldImg.src = "assets/field.png"; 
 
-// Variables de estado (Solo lo que se mueve)
 let players = [] 
 let ball = { x: 700, y: 450 } 
-let boostPads = [] 
 let keys = {}
+
+// INICIALIZACIÓN DE PADS (Esto faltaba para que se vieran)
+let boostPads = [
+    { x: 100, y: 100, type: 'big', active: true }, { x: 1300, y: 100, type: 'big', active: true },
+    { x: 100, y: 800, type: 'big', active: true }, { x: 1300, y: 800, type: 'big', active: true },
+    { x: 700, y: 80, type: 'big', active: true }, { x: 700, y: 820, type: 'big', active: true },
+    { x: 400, y: 450, type: 'small', active: true }, { x: 1000, y: 450, type: 'small', active: true }
+];
 
 // SOPORTE MÓVIL
 let joystick = { active: false, x: 0, y: 0, startX: 0, startY: 0 };
@@ -21,7 +27,6 @@ const playerData = JSON.parse(localStorage.getItem("playerData"))
 
 socket.emit("joinGame", { room: room, ...playerData })
 
-// INPUTS (Teclado)
 document.addEventListener("keydown", (e) => {
     const key = e.key === "Shift" ? "shift" : e.key.toLowerCase();
     keys[key] = true;
@@ -31,10 +36,9 @@ document.addEventListener("keyup", (e) => {
     keys[key] = false;
 });
 
-// ESCUCHA DEL SERVIDOR (Optimizado)
+// --- RECEPCIÓN DE ESTADO (Aquí estaba el lag) ---
 socket.on("state", (state) => {
-    // Sincronizamos solo las posiciones. 
-    // Los nombres y PFPs ya están guardados en el array 'players' local.
+    // Sincronizar jugadores
     state.players.forEach(sp => {
         let lp = players.find(p => p.id === sp.id);
         if (lp) {
@@ -43,39 +47,39 @@ socket.on("state", (state) => {
             lp.boost = sp.boost;
         }
     });
+    
+    // Sincronizar Pelota
     ball = state.ball;
     
-    // Actualizamos si los pads están activos o no
+    // Sincronizar Pads (Solo el estado active)
     if (state.boostPads) {
-        state.boostPads.forEach((spad, index) => {
-            if (boostPads[index]) boostPads[index].active = spad.active;
+        state.boostPads.forEach((spad, i) => {
+            if (boostPads[i]) boostPads[i].active = spad.active;
         });
     }
 });
 
-// INFORMACIÓN ESTÁTICA (Solo cuando alguien entra/sale)
 socket.on("playerInfoUpdate", (fullPlayerData) => {
-    players = fullPlayerData; 
+    // Solo se ejecuta cuando alguien entra o sale. NO causa lag en juego.
+    players = fullPlayerData;
     updateSidePanels(fullPlayerData);
 });
 
-// DIBUJO (Sin lógica, solo render)
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // 1. Campo
     if (fieldImg.complete) ctx.drawImage(fieldImg, 0, 0, 1400, 900);
     
-    // 2. Boost Pads
+    // Dibujar Pads
     boostPads.forEach(pad => {
         if (!pad.active) return;
         ctx.beginPath();
         ctx.fillStyle = pad.type === 'big' ? "rgba(255, 140, 0, 0.8)" : "rgba(255, 204, 0, 0.7)";
         ctx.arc(pad.x, pad.y, pad.type === 'big' ? 18 : 8, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = "white"; ctx.stroke();
     });
 
-    // 3. Jugadores
+    // Dibujar Jugadores
     players.forEach(p => {
         ctx.save();
         ctx.beginPath();
@@ -88,22 +92,15 @@ function draw() {
         ctx.fillStyle = "white";
         ctx.font = "bold 14px Segoe UI";
         ctx.fillText(p.name, p.x, p.y - 35);
-        if(p.title) {
-            ctx.fillStyle = p.titleColor || "#aaa";
-            ctx.font = "bold 10px Segoe UI";
-            ctx.fillText(p.title, p.x, p.y - 50);
-        }
         ctx.restore();
     });
 
-    // 4. Pelota
+    // Dibujar Pelota
     ctx.beginPath(); ctx.fillStyle = "white";
     ctx.arc(ball.x, ball.y, 10, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "black"; ctx.stroke();
 
-    // 5. UI Boost
     drawBoostUI();
-
     requestAnimationFrame(draw);
 }
 
@@ -112,22 +109,15 @@ function drawBoostUI() {
     if (!myPlayer) return;
     const x = canvas.width - 80, y = canvas.height - 80, radius = 55;
     const boostPerc = (myPlayer.boost || 0) / 100;
-    
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
     ctx.fill();
-    
     ctx.beginPath();
-    ctx.lineWidth = 6; ctx.strokeStyle = "#333";
-    ctx.arc(x, y, radius - 5, 0, Math.PI * 2); ctx.stroke();
-    
-    ctx.beginPath();
-    ctx.strokeStyle = "#ff8c00";
-    ctx.arc(x, y, radius - 5, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * boostPerc));
+    ctx.lineWidth = 6; ctx.strokeStyle = "#ff8c00";
+    ctx.arc(x, y, radius - 5, -Math.PI/2, (-Math.PI/2) + (Math.PI*2*boostPerc));
     ctx.stroke();
-    
     ctx.fillStyle = "white"; ctx.font = "bold 28px Segoe UI"; ctx.textAlign = "center";
     ctx.fillText(Math.floor(myPlayer.boost || 0), x, y + 10);
     ctx.restore();
@@ -146,14 +136,13 @@ function updateSidePanels(pList) {
             <div class="avatar-container"><img src="${p.pfp || 'assets/default_pfp.png'}" class="pfp"></div>
             <div class="info-container" style="background-image: url('${bannerPath}')">
                 <div class="name">${p.name}</div>
-                <div class="playerTitle" style="color: ${p.titleColor || '#fff'}">${p.title || ''}</div>
             </div>`;
         if(p.team === "red") redDiv.appendChild(card);
         else blueDiv.appendChild(card);
     });
 }
 
-// ENVÍO DE INPUT AL SERVIDOR (A 60 FPS estables)
+// ENVÍO DE INPUT (60 veces por segundo es lo estándar para no tener lag de respuesta)
 setInterval(() => {
     socket.emit("move", { 
         w: keys["w"] || touchInput.w, a: keys["a"] || touchInput.a, 
