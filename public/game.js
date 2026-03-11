@@ -11,11 +11,14 @@ let targetBall = { x: 700, y: 450 }
 let boostPads = [] 
 let keys = {}
 
-// VARIABLES DE FÍSICA LOCAL (Sincronizadas con el servidor)
+// --- FÍSICA CALIBRADA (Sincronizada con Server) ---
 let localVelX = 0;
 let localVelY = 0;
-const friction = 0.89; 
-const baseAcc = 0.5; 
+const friction = 0.95;  // Más agarre
+const baseAcc = 0.2;    // Aceleración suave
+const boostAcc = 0.45;  // Boost controlado
+const maxSpeedNormal = 5;
+const maxSpeedBoost = 9;
 
 // SOPORTE MÓVIL
 let joystick = { active: false, x: 0, y: 0, startX: 0, startY: 0 };
@@ -96,16 +99,15 @@ function drawPlayers() {
             if (keys['d'] || touchInput.d) moveX += 1;
 
             let isBoosting = (keys['shift'] || touchInput.shift) && p.boost > 0;
-            let currentAcc = isBoosting ? 1.75 : baseAcc;
-            let currentLimit = isBoosting ? 10.5 : 5.2;
+            let currentAcc = isBoosting ? boostAcc : baseAcc;
+            let currentLimit = isBoosting ? maxSpeedBoost : maxSpeedNormal;
             
             localVelX += moveX * currentAcc;
             localVelY += moveY * currentAcc;
             localVelX *= friction;
             localVelY *= friction;
 
-            // Sincronización de límite de velocidad local para mejorar predicción
-            let speed = Math.sqrt(localVelX * localVelX + localVelY * localVelY);
+            let speed = Math.sqrt(localVelX ** 2 + localVelY ** 2);
             if (speed > currentLimit) {
                 localVelX = (localVelX / speed) * currentLimit;
                 localVelY = (localVelY / speed) * currentLimit;
@@ -114,17 +116,16 @@ function drawPlayers() {
             p.x += localVelX;
             p.y += localVelY;
 
-            // Interpolación de corrección suave
-            let error = Math.hypot(p.x - p.targetX, p.y - p.targetY);
-            if (error > 60) {
-                p.x = p.targetX; p.y = p.targetY;
-            } else {
-                p.x += (p.targetX - p.x) * 0.12;
-                p.y += (p.targetY - p.y) * 0.12;
+            // Reconciliación ultra suave
+            let dist = Math.hypot(p.x - p.targetX, p.y - p.targetY);
+            if (dist > 0.1) {
+                p.x += (p.targetX - p.x) * 0.04; 
+                p.y += (p.targetY - p.y) * 0.04;
             }
+            if (dist > 80) { p.x = p.targetX; p.y = p.targetY; }
         } else {
-            p.x += (p.targetX - p.x) * 0.3;
-            p.y += (p.targetY - p.y) * 0.3;
+            p.x += (p.targetX - p.x) * 0.15;
+            p.y += (p.targetY - p.y) * 0.15;
         }
 
         ctx.save();
@@ -148,14 +149,8 @@ function drawPlayers() {
 }
 
 function drawBall() {
-    let distToMe = 1000;
-    const myPlayer = players.find(p => p.id === socket.id);
-    if(myPlayer) distToMe = Math.hypot(ball.x - myPlayer.x, ball.y - myPlayer.y);
-
-    let lerpFactor = distToMe < 70 ? 0.8 : 0.3; 
-    ball.x += (targetBall.x - ball.x) * lerpFactor;
-    ball.y += (targetBall.y - ball.y) * lerpFactor;
-
+    ball.x += (targetBall.x - ball.x) * 0.15;
+    ball.y += (targetBall.y - ball.y) * 0.15;
     ctx.beginPath(); ctx.fillStyle = "white";
     ctx.arc(ball.x, ball.y, 10, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "black"; ctx.stroke();
@@ -164,31 +159,22 @@ function drawBall() {
 function drawBoostUI() {
     const myPlayer = players.find(p => p.id === socket.id);
     if (!myPlayer || myPlayer.boost === undefined) return;
-    
     const x = canvas.width - 80, y = canvas.height - 80, radius = 55;
     const boostPerc = myPlayer.boost / 100;
-
     ctx.save();
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
     ctx.fill();
-
     ctx.beginPath();
     ctx.lineWidth = 6;
     ctx.strokeStyle = "#333";
     ctx.arc(x, y, radius - 5, 0, Math.PI * 2);
     ctx.stroke();
-
     ctx.beginPath();
     ctx.strokeStyle = "#ff8c00";
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = "#ff8c00";
-    ctx.lineCap = "round";
     ctx.arc(x, y, radius - 5, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * boostPerc));
     ctx.stroke();
-
-    ctx.shadowBlur = 0;
     ctx.fillStyle = "white";
     ctx.font = "bold 28px Segoe UI";
     ctx.textAlign = "center";
@@ -205,16 +191,8 @@ function draw() {
         if (!pad.active) return;
         ctx.save();
         ctx.beginPath();
-        ctx.shadowBlur = 12;
-        if (pad.type === 'big') {
-            ctx.shadowColor = "#ff8c00";
-            ctx.fillStyle = "rgba(255, 140, 0, 0.8)";
-            ctx.arc(pad.x, pad.y, 18, 0, Math.PI * 2);
-        } else {
-            ctx.shadowColor = "#ffcc00"; 
-            ctx.fillStyle = "rgba(255, 204, 0, 0.7)"; 
-            ctx.arc(pad.x, pad.y, 8, 0, Math.PI * 2);
-        }
+        ctx.fillStyle = pad.type === 'big' ? "rgba(255, 140, 0, 0.8)" : "rgba(255, 204, 0, 0.7)";
+        ctx.arc(pad.x, pad.y, pad.type === 'big' ? 18 : 8, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     });
@@ -240,14 +218,9 @@ function updateSidePanels() {
     players.forEach(p => {
         const card = document.createElement("div");
         card.className = "playerCard";
-        
-        // Asegurar que la ruta del banner sea correcta
         const bannerPath = p.banner && p.banner.includes('assets') ? p.banner : `assets/banners/${p.banner || 'default.png'}`;
-        
         card.innerHTML = `
-            <div class="avatar-container">
-                <img src="${p.pfp || 'assets/default_pfp.png'}" class="pfp">
-            </div>
+            <div class="avatar-container"><img src="${p.pfp || 'assets/default_pfp.png'}" class="pfp"></div>
             <div class="info-container" style="background-image: url('${bannerPath}')">
                 <div class="name">${p.name}</div>
                 <div class="playerTitle" style="color: ${p.titleColor || '#fff'}">${p.title || ''}</div>
