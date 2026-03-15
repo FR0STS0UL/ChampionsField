@@ -1,42 +1,57 @@
 // ═══════════════════════════════════════════════════════════════
-//  ROCKET HAX — Top-down 2D (HaxBall style) v5
-//  WASD free movement, Space=dash, Shift=boost
-//  Client-side prediction + reconciliation
+//  ROCKET HAX — Top-down 2D v6
+//  WASD + Space(dash) + Shift(boost)
+//  Client-side prediction, decals, custom boost trails
 // ═══════════════════════════════════════════════════════════════
 const socket = io()
 const canvas = document.getElementById("game")
 const ctx    = canvas.getContext("2d")
 
-const W = 1600, H = 820
+const W=1600, H=820
 const WALL_T=55, WALL_B=H-55, WALL_L=55, WALL_R=W-55
 const GOAL_W=40, GOAL_H=200, GOAL_CY=H/2
 const GOAL_L={x:WALL_L-GOAL_W, y:GOAL_CY-GOAL_H/2, w:GOAL_W, h:GOAL_H}
 const GOAL_R={x:WALL_R,        y:GOAL_CY-GOAL_H/2, w:GOAL_W, h:GOAL_H}
 const BALL_R=24, CAR_R=22
 
-// Physics (must mirror server)
+// Physics — must mirror server
 const ACCEL=900, FRICTION=0.88, MAX_SPD=580
 const BOOST_ACCEL=1400, BOOST_MAX=860, BOOST_DRAIN=38, BOOST_REGEN=9
-const DASH_SPEED=MAX_SPD*3.2, DASH_DUR=0.22, DASH_CD=1.4
+const DASH_SPEED=MAX_SPD*2.0, DASH_DUR=0.18, DASH_CD=1.2
 
-// State
+// ─── STATE ───────────────────────────────────────────────────────
 let myId=null, ball={x:W/2,y:H/2,spin:0}, ballAngle=0
 let scores={blue:0,orange:0}, matchTime=300, padAng=0
+let gamePhase="playing", kickoffTimer=0
+let lastTimerVal=999  // for 10-second countdown sound trigger
 let settings={blueTeamName:"BLUE",orangeTeamName:"ORANGE",blueColor:"#00aaff",orangeColor:"#ff6600",seriesTitle:"FRIENDLY MATCH",gameNum:1,bestOf:7}
 const particles=[]
+// Post-goal dark overlay
+let dimAlpha=0   // 0=normal, 1=full dim — animates in/out
 
 const PADS_POS=[
-    {x:180,     y:180,     type:"big"},   {x:W-180,   y:180,     type:"big"},
-    {x:180,     y:H-180,   type:"big"},   {x:W-180,   y:H-180,   type:"big"},
-    {x:W/2,     y:H/2,     type:"big"},
-    {x:W/2,     y:160,     type:"small"}, {x:W/2,     y:H-160,   type:"small"},
-    {x:160,     y:H/2,     type:"small"}, {x:W-160,   y:H/2,     type:"small"},
-    {x:W*0.3,   y:H*0.3,   type:"small"}, {x:W*0.7,   y:H*0.3,  type:"small"},
-    {x:W*0.3,   y:H*0.7,   type:"small"}, {x:W*0.7,   y:H*0.7,  type:"small"},
+    {x:180,y:180,type:"big"},{x:W-180,y:180,type:"big"},
+    {x:180,y:H-180,type:"big"},{x:W-180,y:H-180,type:"big"},{x:W/2,y:H/2,type:"big"},
+    {x:W/2,y:160,type:"small"},{x:W/2,y:H-160,type:"small"},
+    {x:160,y:H/2,type:"small"},{x:W-160,y:H/2,type:"small"},
+    {x:W*0.3,y:H*0.3,type:"small"},{x:W*0.7,y:H*0.3,type:"small"},
+    {x:W*0.3,y:H*0.7,type:"small"},{x:W*0.7,y:H*0.7,type:"small"},
 ]
 const boostPads=PADS_POS.map(p=>({...p,active:true}))
 
-// Player registry
+// ─── IMAGE CACHE ─────────────────────────────────────────────────
+const imgCache={}
+function loadImg(src){
+    if(!src) return null
+    if(imgCache[src]) return imgCache[src]
+    const img=new Image(); img.src=src; imgCache[src]=img; return img
+}
+// Preload all decals + boost trails
+for(let i=1;i<=10;i++) loadImg(`assets/decals/decal${i}.png`)
+for(let i=11;i<=15;i++) loadImg(`assets/decals/decal${i}.gif`)
+for(let i=1;i<=10;i++) loadImg(`assets/boost/boost${i}.png`)
+
+// ─── PLAYER REGISTRY ─────────────────────────────────────────────
 const playerMap={}
 function getPlayers(){ return Object.values(playerMap) }
 function ensurePlayer(id,def={}){
@@ -46,26 +61,24 @@ function ensurePlayer(id,def={}){
             id,team,
             name:def.name||"…",title:def.title||"",titleColor:def.titleColor||"#aaa",
             pfp:def.pfp||"assets/default_pfp.png",banner:def.banner||"assets/banners/Default.png",
-            x:def.x??(team==="blue"?320:W-320), y:def.y??(H/2),
+            decal:def.decal||null, boostTrail:def.boostTrail||null,
+            x:def.x??(team==="blue"?WALL_L+160:WALL_R-160), y:def.y??(H/2),
             vx:0,vy:0,boost:33,dashing:false,dashTimer:0,dashCd:0,isBoosting:false,
-            rx:def.x??(team==="blue"?320:W-320), ry:def.y??(H/2),
-            angle:0, trailPts:[], dashParticles:[]
+            rx:def.x??(team==="blue"?WALL_L+160:WALL_R-160), ry:def.y??(H/2),
+            trailPts:[]
         }
     }
     return playerMap[id]
 }
 
-// Local prediction
-const local={
-    ready:false, x:0,y:0,vx:0,vy:0,boost:33,
-    dashing:false,dashTimer:0,dashCd:0,dashVx:0,dashVy:0
-}
+// ─── LOCAL PREDICTION ────────────────────────────────────────────
+const local={ready:false,x:0,y:0,vx:0,vy:0,boost:33,dashing:false,dashTimer:0,dashCd:0,dashVx:0,dashVy:0}
 
-// Input
+// ─── INPUT ───────────────────────────────────────────────────────
 const keys={}
 document.addEventListener("keydown",e=>{
     const k=e.key==="Shift"?"shift":e.code==="Space"?"dash":e.key.toLowerCase()
-    keys[k]=true; if(["Space"].includes(e.code))e.preventDefault()
+    keys[k]=true; if(e.code==="Space")e.preventDefault()
 })
 document.addEventListener("keyup",e=>{
     const k=e.key==="Shift"?"shift":e.code==="Space"?"dash":e.key.toLowerCase()
@@ -73,7 +86,6 @@ document.addEventListener("keyup",e=>{
 })
 function getInput(){ return {w:!!keys.w,a:!!keys.a,s:!!keys.s,d:!!keys.d,shift:!!keys.shift,dash:!!keys.dash} }
 
-// Input buffer
 let inputSeq=0
 const inputBuf=[]
 setInterval(()=>{
@@ -83,7 +95,7 @@ setInterval(()=>{
     socket.emit("move",{...inp,seq:inputSeq})
 },1000/60)
 
-// Prediction physics
+// ─── PREDICTION PHYSICS ──────────────────────────────────────────
 function physicsStep(s,inp,dt){
     const boosting=inp.shift&&s.boost>0
     if(boosting) s.boost=Math.max(0,  s.boost-BOOST_DRAIN*dt)
@@ -92,32 +104,27 @@ function physicsStep(s,inp,dt){
 
     if(inp.dash&&!s.dashing&&s.dashCd<=0){
         let dx=(inp.d?1:0)-(inp.a?1:0), dy=(inp.s?1:0)-(inp.w?1:0)
-        const len=Math.hypot(dx,dy)
-        if(len<0.1){dx=s.vx;dy=s.vy}
+        if(Math.hypot(dx,dy)<0.1){dx=s.vx;dy=s.vy}
         const dl=Math.hypot(dx,dy)||1
         s.dashVx=(dx/dl)*DASH_SPEED; s.dashVy=(dy/dl)*DASH_SPEED
         s.dashing=true; s.dashTimer=DASH_DUR; s.dashCd=DASH_CD
     }
-
     if(s.dashing){
         const t=s.dashTimer/DASH_DUR
         s.vx=s.dashVx*t; s.vy=s.dashVy*t
         s.dashTimer-=dt; if(s.dashTimer<=0) s.dashing=false
     } else {
-        if(inp.w) s.vy-=ACCEL*dt
-        if(inp.s) s.vy+=ACCEL*dt
-        if(inp.a) s.vx-=ACCEL*dt
-        if(inp.d) s.vx+=ACCEL*dt
+        if(inp.w)s.vy-=ACCEL*dt; if(inp.s)s.vy+=ACCEL*dt
+        if(inp.a)s.vx-=ACCEL*dt; if(inp.d)s.vx+=ACCEL*dt
         if(boosting){
-            const mx=(inp.d?1:0)-(inp.a?1:0), my=(inp.s?1:0)-(inp.w?1:0)
-            const ml=Math.hypot(mx,my)||1
-            if(ml>0.1){ s.vx+=(mx/ml)*BOOST_ACCEL*dt; s.vy+=(my/ml)*BOOST_ACCEL*dt }
+            const mx=(inp.d?1:0)-(inp.a?1:0),my=(inp.s?1:0)-(inp.w?1:0),ml=Math.hypot(mx,my)||1
+            if(ml>0.1){s.vx+=(mx/ml)*BOOST_ACCEL*dt;s.vy+=(my/ml)*BOOST_ACCEL*dt}
         }
-        s.vx*=Math.pow(FRICTION,dt*60); s.vy*=Math.pow(FRICTION,dt*60)
-        const maxS=boosting?BOOST_MAX:MAX_SPD, spd=Math.hypot(s.vx,s.vy)
+        s.vx*=Math.pow(FRICTION,dt*60);s.vy*=Math.pow(FRICTION,dt*60)
+        const maxS=boosting?BOOST_MAX:MAX_SPD,spd=Math.hypot(s.vx,s.vy)
         if(spd>maxS){s.vx=s.vx/spd*maxS;s.vy=s.vy/spd*maxS}
     }
-    s.x+=s.vx*dt; s.y+=s.vy*dt
+    s.x+=s.vx*dt;s.y+=s.vy*dt
     if(s.x-CAR_R<WALL_L){s.x=WALL_L+CAR_R;s.vx=Math.abs(s.vx)*0.4}
     if(s.x+CAR_R>WALL_R){s.x=WALL_R-CAR_R;s.vx=-Math.abs(s.vx)*0.4}
     if(s.y-CAR_R<WALL_T){s.y=WALL_T+CAR_R;s.vy=Math.abs(s.vy)*0.4}
@@ -129,11 +136,10 @@ function reconcile(srv){
     local.boost=srv.boost;local.dashing=srv.dashing||false
     local.dashTimer=srv.dashTimer||0;local.dashCd=srv.dashCd||0
     local.ready=true
-    const lastAck=srv.seq||0
-    inputBuf.filter(e=>e.seq>lastAck).forEach(e=>physicsStep(local,e.inp,e.dt))
+    inputBuf.filter(e=>e.seq>(srv.seq||0)).forEach(e=>physicsStep(local,e.inp,e.dt))
 }
 
-// Socket
+// ─── SOCKET ──────────────────────────────────────────────────────
 const params=new URLSearchParams(window.location.search)
 const room=params.get("room")
 const playerData=JSON.parse(localStorage.getItem("playerData")||"{}")
@@ -146,12 +152,14 @@ socket.on("state",data=>{
     data.players.forEach(sp=>{
         const p=ensurePlayer(sp.id,{team:sp.team})
         p.x=sp.x;p.y=sp.y;p.vx=sp.vx||0;p.vy=sp.vy||0
-        p.boost=sp.boost;p.dashing=sp.dashing;p.isBoosting=sp.isBoosting
-        p.dashCd=sp.dashCd||0
+        p.boost=sp.boost;p.dashing=sp.dashing;p.isBoosting=sp.isBoosting;p.dashCd=sp.dashCd||0
+        if(sp.decal!==undefined) p.decal=sp.decal
+        if(sp.boostTrail!==undefined) p.boostTrail=sp.boostTrail
     })
     const live=new Set(data.players.map(p=>p.id))
     Object.keys(playerMap).forEach(id=>{if(!live.has(id))delete playerMap[id]})
     ball=data.ball; scores=data.scores; matchTime=data.matchTime
+    gamePhase=data.phase||"playing"; kickoffTimer=data.kickoffTimer||0
     if(data.settings) settings=data.settings
     if(data.pads) data.pads.forEach((sp,i)=>boostPads[i]&&(boostPads[i].active=sp.active))
     updateHUD()
@@ -163,6 +171,7 @@ socket.on("playerInfoUpdate",({players:pList,settings:s})=>{
         const p=ensurePlayer(sp.id,sp)
         p.name=sp.name;p.title=sp.title;p.titleColor=sp.titleColor
         p.pfp=sp.pfp;p.banner=sp.banner;p.team=sp.team
+        p.decal=sp.decal||null; p.boostTrail=sp.boostTrail||null
     })
     const live=new Set(pList.map(p=>p.id))
     Object.keys(playerMap).forEach(id=>{if(!live.has(id))delete playerMap[id]})
@@ -171,17 +180,19 @@ socket.on("playerInfoUpdate",({players:pList,settings:s})=>{
 
 socket.on("goal",({scorer,scores:sc,settings:s})=>{
     if(s) settings=s; scores=sc; local.ready=false
+    dimAlpha=1   // darken field
     showGoalBanner(scorer); spawnGoalExplosion(scorer); updateHUD()
 })
 socket.on("kickoff",({scores:sc,settings:s})=>{
     if(s) settings=s; scores=sc
-    document.getElementById("goalBanner").classList.remove("show"); updateHUD()
+    dimAlpha=0
+    document.getElementById("goalBanner").classList.remove("show")
+    updateHUD()
 })
-socket.on("gameOver",sc=>{scores=sc;showGameOver(sc)})
+socket.on("gameOver",sc=>{ scores=sc; showGameOver(sc) })
 
 // ─── HUD ─────────────────────────────────────────────────────────
 function updateHUD(){
-    // Scoreboard team names + colors
     const bc=settings.blueColor||"#00aaff", oc=settings.orangeColor||"#ff6600"
     document.getElementById("sb-blue-name").textContent=settings.blueTeamName||"BLUE"
     document.getElementById("sb-orange-name").textContent=settings.orangeTeamName||"ORANGE"
@@ -189,45 +200,49 @@ function updateHUD(){
     document.getElementById("sb-orange-score").textContent=scores.orange||0
     document.getElementById("sb-blue-block").style.background=bc
     document.getElementById("sb-orange-block").style.background=oc
-    // Series info
     document.getElementById("sb-series-title").textContent=settings.seriesTitle||"FRIENDLY"
-    document.getElementById("sb-game-num").textContent=`GAME ${settings.gameNum||1}`
-    document.getElementById("sb-best-of").textContent=`BEST OF ${settings.bestOf||7}`
-    // Timer
-    const m=Math.floor(matchTime/60),s=Math.floor(matchTime%60)
-    document.getElementById("hud-timer").textContent=`${m}:${s.toString().padStart(2,"0")}`
-    // Boost circle for my player
+    document.getElementById("sb-game-num").textContent="GAME "+(settings.gameNum||1)
+    document.getElementById("sb-best-of").textContent="BEST OF "+(settings.bestOf||7)
+    // Timer — red + large at ≤10s
+    const m=Math.floor(matchTime/60), s=Math.floor(matchTime%60)
+    const timerEl=document.getElementById("hud-timer")
+    timerEl.textContent=`${m}:${s.toString().padStart(2,"0")}`
+    const isLow = matchTime>0 && matchTime<=10
+    timerEl.style.color     = isLow ? "#ff3333" : "#fff"
+    timerEl.style.fontSize  = isLow ? "34px"    : "28px"
+    timerEl.style.textShadow= isLow ? "0 0 20px #ff333388" : "none"
+    // Kickoff countdown shown separately
+    const kEl=document.getElementById("kickoff-countdown")
+    if(gamePhase==="kickoffCountdown" && kickoffTimer>0){
+        kEl.textContent=kickoffTimer; kEl.style.display="block"
+    } else { kEl.style.display="none" }
+    // Boost circle
     const me=playerMap[myId]
     if(me){
         const b=Math.round(local.ready?local.boost:me.boost)
         document.getElementById("boost-circle-val").textContent=b
-        drawBoostCircle(b, me.team==="blue"?settings.blueColor:settings.orangeColor)
+        drawBoostCircle(b, me.team==="blue"?bc:oc)
     }
 }
 
 function drawBoostCircle(pct, color){
-    const bc=document.getElementById("boost-canvas")
-    if(!bc) return
+    const bc=document.getElementById("boost-canvas"); if(!bc) return
     const c=bc.getContext("2d"), sz=bc.width, cx=sz/2, cy=sz/2, r=sz/2-6
     c.clearRect(0,0,sz,sz)
-    // Background ring
-    c.beginPath(); c.arc(cx,cy,r,0,Math.PI*2)
-    c.strokeStyle="rgba(255,255,255,0.1)"; c.lineWidth=8; c.stroke()
-    // Fill arc
-    const start=-Math.PI/2, end=start+(Math.PI*2*(pct/100))
-    c.beginPath(); c.arc(cx,cy,r,start,end)
-    c.strokeStyle=color; c.lineWidth=8
-    c.shadowColor=color; c.shadowBlur=12; c.stroke()
-    c.shadowBlur=0
+    c.beginPath();c.arc(cx,cy,r,0,Math.PI*2);c.strokeStyle="rgba(255,255,255,0.1)";c.lineWidth=8;c.stroke()
+    const start=-Math.PI/2, end=start+Math.PI*2*(pct/100)
+    c.beginPath();c.arc(cx,cy,r,start,end);c.strokeStyle=color;c.lineWidth=8
+    c.shadowColor=color;c.shadowBlur=12;c.stroke();c.shadowBlur=0
 }
 
 function showGoalBanner(team){
     const el=document.getElementById("goalBanner")
-    const word=document.getElementById("goalWord"), sub=document.getElementById("goalSub")
     const color=team==="blue"?(settings.blueColor||"#00aaff"):(settings.orangeColor||"#ff6600")
     const name=team==="blue"?(settings.blueTeamName||"BLUE"):(settings.orangeTeamName||"ORANGE")
-    word.style.color=color; word.style.textShadow=`0 0 60px ${color}88`
-    word.textContent="¡GOL!"; sub.textContent=name+" ANOTA"
+    document.getElementById("goalWord").style.color=color
+    document.getElementById("goalWord").style.textShadow=`0 0 60px ${color}88`
+    document.getElementById("goalWord").textContent="¡GOL!"
+    document.getElementById("goalSub").textContent=name+" ANOTA"
     el.classList.add("show")
 }
 function showGameOver(sc){
@@ -238,7 +253,6 @@ function showGameOver(sc){
     document.getElementById("goalSub").textContent=`${sc.blue} — ${sc.orange}`
     document.getElementById("goalBanner").classList.add("show")
 }
-
 function updateSidePanels(pList){
     const bd=document.getElementById("blueTeam"),od=document.getElementById("orangeTeam")
     if(!bd||!od) return; bd.innerHTML=od.innerHTML=""
@@ -262,20 +276,19 @@ function spawnParts(x,y,color,count,spd,life,sz=3){
     }
 }
 function spawnDashParticles(x,y){
-    for(let i=0;i<18;i++){
-        const a=Math.random()*Math.PI*2,s=120+Math.random()*200
-        particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.5,maxLife:0.5,color:`hsl(${260+Math.random()*40},100%,${65+Math.random()*20}%)`,size:3+Math.random()*5,drag:0.88})
+    for(let i=0;i<16;i++){
+        const a=Math.random()*Math.PI*2,s=100+Math.random()*180
+        particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.45,maxLife:0.45,color:`hsl(${260+Math.random()*40},100%,${65+Math.random()*20}%)`,size:3+Math.random()*4,drag:0.88})
     }
 }
 function spawnGoalExplosion(team){
     const c=team==="blue"?(settings.blueColor||"#00aaff"):(settings.orangeColor||"#ff6600")
     const gx=team==="blue"?GOAL_R.x+GOAL_R.w/2:GOAL_L.x+GOAL_L.w/2
-    spawnParts(gx,GOAL_CY,c,60,600,1.4,6); spawnParts(gx,GOAL_CY,"#fff",25,350,0.9,3)
+    spawnParts(gx,GOAL_CY,c,70,650,1.4,6); spawnParts(gx,GOAL_CY,"#fff",25,350,0.9,3)
 }
 function updateParticles(dt){
     for(let i=particles.length-1;i>=0;i--){
-        const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt
-        p.vx*=p.drag;p.vy*=p.drag;p.life-=dt
+        const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=p.drag;p.vy*=p.drag;p.life-=dt
         if(p.life<=0) particles.splice(i,1)
     }
 }
@@ -283,70 +296,62 @@ function drawParticles(){
     particles.forEach(p=>{
         const t=p.life/p.maxLife;ctx.globalAlpha=t*0.9;ctx.shadowColor=p.color;ctx.shadowBlur=8
         ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(p.x,p.y,p.size*t,0,Math.PI*2);ctx.fill()
-    }); ctx.globalAlpha=1;ctx.shadowBlur=0
+    });ctx.globalAlpha=1;ctx.shadowBlur=0
 }
 
 // ─── ARENA ───────────────────────────────────────────────────────
 function drawArena(){
-    // Background — top-down dark green grass
     ctx.fillStyle="#0e2016"; ctx.fillRect(0,0,W,H)
-
-    // Grass lines
-    ctx.strokeStyle="rgba(255,255,255,0.03)"; ctx.lineWidth=1
-    for(let x=WALL_L;x<=WALL_R;x+=80){
-        ctx.beginPath();ctx.moveTo(x,WALL_T);ctx.lineTo(x,WALL_B);ctx.stroke()
+    // Grass stripes
+    for(let i=0;i<8;i++){
+        const x=WALL_L+(i*(WALL_R-WALL_L)/8), w=(WALL_R-WALL_L)/8
+        ctx.fillStyle=i%2===0?"rgba(255,255,255,0.012)":"rgba(0,0,0,0.015)"
+        ctx.fillRect(x,WALL_T,w,WALL_B-WALL_T)
     }
-    for(let y=WALL_T;y<=WALL_B;y+=80){
-        ctx.beginPath();ctx.moveTo(WALL_L,y);ctx.lineTo(WALL_R,y);ctx.stroke()
-    }
-
-    // Field markings
-    ctx.strokeStyle="rgba(255,255,255,0.12)"; ctx.lineWidth=2
-    // Outer field boundary
+    // Grid lines
+    ctx.strokeStyle="rgba(255,255,255,0.025)";ctx.lineWidth=1
+    for(let x=WALL_L;x<=WALL_R;x+=80){ctx.beginPath();ctx.moveTo(x,WALL_T);ctx.lineTo(x,WALL_B);ctx.stroke()}
+    for(let y=WALL_T;y<=WALL_B;y+=80){ctx.beginPath();ctx.moveTo(WALL_L,y);ctx.lineTo(WALL_R,y);ctx.stroke()}
+    // Field lines
+    ctx.strokeStyle="rgba(255,255,255,0.15)";ctx.lineWidth=2
     ctx.strokeRect(WALL_L,WALL_T,WALL_R-WALL_L,WALL_B-WALL_T)
-    // Center line (vertical, since goals are on left/right)
     ctx.beginPath();ctx.moveTo(W/2,WALL_T);ctx.lineTo(W/2,WALL_B);ctx.stroke()
-    // Center circle
     ctx.beginPath();ctx.arc(W/2,H/2,100,0,Math.PI*2);ctx.stroke()
-    // Center dot
-    ctx.beginPath();ctx.arc(W/2,H/2,6,0,Math.PI*2);ctx.fillStyle="rgba(255,255,255,0.3)";ctx.fill()
+    ctx.beginPath();ctx.arc(W/2,H/2,6,0,Math.PI*2);ctx.fillStyle="rgba(255,255,255,0.25)";ctx.fill()
     // Penalty arcs
+    ctx.strokeStyle="rgba(255,255,255,0.08)";ctx.lineWidth=2
     ;[[WALL_L+80,H/2],[WALL_R-80,H/2]].forEach(([cx,cy])=>{
-        ctx.beginPath();ctx.arc(cx,cy,90,0,Math.PI*2)
-        ctx.strokeStyle="rgba(255,255,255,0.08)";ctx.lineWidth=2;ctx.stroke()
+        ctx.beginPath();ctx.arc(cx,cy,90,0,Math.PI*2);ctx.stroke()
     })
-
+    // Half-court colour tint (subtle)
+    const blueHalf=ctx.createLinearGradient(WALL_L,0,W/2,0)
+    blueHalf.addColorStop(0,"rgba(0,100,200,0.06)"); blueHalf.addColorStop(1,"transparent")
+    ctx.fillStyle=blueHalf;ctx.fillRect(WALL_L,WALL_T,W/2-WALL_L,WALL_B-WALL_T)
+    const orgHalf=ctx.createLinearGradient(W/2,0,WALL_R,0)
+    orgHalf.addColorStop(0,"transparent"); orgHalf.addColorStop(1,"rgba(200,80,0,0.06)")
+    ctx.fillStyle=orgHalf;ctx.fillRect(W/2,WALL_T,WALL_R-W/2,WALL_B-WALL_T)
     // Walls
-    ctx.fillStyle="#0a1a12"
+    ctx.fillStyle="#09150f"
     ctx.fillRect(0,0,WALL_L,H);ctx.fillRect(WALL_R,0,W-WALL_R,H)
     ctx.fillRect(0,0,W,WALL_T);ctx.fillRect(0,WALL_B,W,H-WALL_B)
-
-    // Wall glow strips
-    ;[[WALL_L-2,true],[WALL_R-1,false]].forEach(([wx,left])=>{
-        const g=ctx.createLinearGradient(wx,0,wx+(left?4:-4),0)
-        g.addColorStop(0,"rgba(100,200,100,0.3)");g.addColorStop(1,"transparent")
-        ctx.fillStyle=g;ctx.fillRect(wx,WALL_T,4,WALL_B-WALL_T)
+    // Wall glow
+    ;[[WALL_L-2,"rgba(80,200,80,0.25)"],[WALL_R-1,"rgba(80,200,80,0.25)"]].forEach(([wx,c])=>{
+        ctx.fillStyle=c;ctx.fillRect(wx,WALL_T,3,WALL_B-WALL_T)
     })
-    ;[[WALL_T-2,true],[WALL_B-1,false]].forEach(([wy])=>{
-        const g=ctx.createLinearGradient(0,wy,0,wy+4)
-        g.addColorStop(0,"rgba(100,200,100,0.3)");g.addColorStop(1,"transparent")
-        ctx.fillStyle=g;ctx.fillRect(WALL_L,wy,WALL_R-WALL_L,4)
+    ;[[WALL_T-2,"rgba(80,200,80,0.25)"],[WALL_B-1,"rgba(80,200,80,0.25)"]].forEach(([wy,c])=>{
+        ctx.fillStyle=c;ctx.fillRect(WALL_L,wy,WALL_R-WALL_L,3)
     })
-
-    // Goals
     drawGoal(GOAL_L, settings.blueColor||"#00aaff",   true)
     drawGoal(GOAL_R, settings.orangeColor||"#ff6600",  false)
 }
 
 function drawGoal(g,color,isLeft){
     ctx.save()
-    ctx.fillStyle="rgba(0,0,0,0.7)"; ctx.fillRect(g.x,g.y,g.w,g.h)
-    // Net lines
-    ctx.strokeStyle=color+"33"; ctx.lineWidth=0.8
+    ctx.fillStyle="rgba(0,0,0,0.75)";ctx.fillRect(g.x,g.y,g.w,g.h)
+    ctx.strokeStyle=color+"33";ctx.lineWidth=0.8
     for(let y=g.y;y<g.y+g.h;y+=16){ctx.beginPath();ctx.moveTo(g.x,y);ctx.lineTo(g.x+g.w,y);ctx.stroke()}
     for(let x=g.x;x<g.x+g.w;x+=12){ctx.beginPath();ctx.moveTo(x,g.y);ctx.lineTo(x,g.y+g.h);ctx.stroke()}
-    // Frame
-    ctx.shadowColor=color;ctx.shadowBlur=14;ctx.strokeStyle=color;ctx.lineWidth=3
+    ctx.shadowColor=color;ctx.shadowBlur=16;ctx.strokeStyle=color;ctx.lineWidth=3
     ctx.beginPath()
     if(isLeft){ctx.moveTo(g.x+g.w,g.y);ctx.lineTo(g.x,g.y);ctx.lineTo(g.x,g.y+g.h);ctx.lineTo(g.x+g.w,g.y+g.h)}
     else       {ctx.moveTo(g.x,g.y);ctx.lineTo(g.x+g.w,g.y);ctx.lineTo(g.x+g.w,g.y+g.h);ctx.lineTo(g.x,g.y+g.h)}
@@ -370,78 +375,95 @@ function drawBoostPads(){
     })
 }
 
-// ─── CAR (top-down circle with direction arrow) ───────────────────
+// ─── CAR DRAW — decal support ────────────────────────────────────
+function tintCanvas(src, hexColor){
+    // Returns a tinted offscreen canvas: src image recolored to hexColor hue
+    const key="tint_"+src+"_"+hexColor
+    if(imgCache[key]) return imgCache[key]
+    const srcImg=imgCache[src]
+    if(!srcImg||!srcImg.complete||srcImg.naturalWidth===0) return null
+    const oc=document.createElement("canvas")
+    oc.width=srcImg.naturalWidth; oc.height=srcImg.naturalHeight
+    const oc2=oc.getContext("2d")
+    oc2.drawImage(srcImg,0,0)
+    oc2.globalCompositeOperation="source-atop"
+    oc2.fillStyle=hexColor+"cc"; oc2.fillRect(0,0,oc.width,oc.height)
+    imgCache[key]=oc; return oc
+}
+
 function drawCar(p, x, y, vx, vy, dashing, isBoosting){
     const isBlue=p.team==="blue"
     const teamColor=isBlue?(settings.blueColor||"#00aaff"):(settings.orangeColor||"#ff6600")
     const r=CAR_R
-
-    // Velocity angle for direction arrow
     const spd=Math.hypot(vx,vy)
     const angle=spd>10?Math.atan2(vy,vx):null
 
-    ctx.save(); ctx.translate(x,y)
+    ctx.save();ctx.translate(x,y)
 
-    // Dash ring effect
+    // Dash ring
     if(dashing){
-        ctx.beginPath();ctx.arc(0,0,r+8,0,Math.PI*2)
+        ctx.beginPath();ctx.arc(0,0,r+9,0,Math.PI*2)
         ctx.strokeStyle="#cc88ff";ctx.lineWidth=3
-        ctx.shadowColor="#aa44ff";ctx.shadowBlur=20;ctx.stroke();ctx.shadowBlur=0
+        ctx.shadowColor="#aa44ff";ctx.shadowBlur=22;ctx.stroke();ctx.shadowBlur=0
+    }
+    if(isBoosting){ctx.shadowColor=teamColor;ctx.shadowBlur=22}
+
+    // Decal (tinted to team colour), drawn UNDER the circle fill
+    const decalSrc=p.decal?`assets/decals/${p.decal}`:null
+    if(decalSrc){
+        const tinted=tintCanvas(decalSrc, teamColor)
+        if(tinted){
+            ctx.save();ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.clip()
+            if(angle!==null)ctx.rotate(angle)
+            ctx.drawImage(tinted,-r,-r,r*2,r*2)
+            ctx.restore()
+        }
     }
 
-    // Boost glow
-    if(isBoosting){ctx.shadowColor=teamColor;ctx.shadowBlur=20}
-
-    // Car body circle
+    // Car body circle (semi-transparent so decal shows through)
     const grad=ctx.createRadialGradient(-r*0.3,-r*0.3,0,0,0,r)
-    grad.addColorStop(0,"rgba(255,255,255,0.25)"); grad.addColorStop(0.5,teamColor); grad.addColorStop(1,shadeColor(teamColor,-40))
+    grad.addColorStop(0,decalSrc?"rgba(255,255,255,0.12)":"rgba(255,255,255,0.22)")
+    grad.addColorStop(0.5,decalSrc?teamColor+"bb":teamColor)
+    grad.addColorStop(1,shadeColor(teamColor,-45))
     ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill()
-    ctx.strokeStyle="rgba(255,255,255,0.4)";ctx.lineWidth=2;ctx.stroke()
+    ctx.strokeStyle="rgba(255,255,255,0.45)";ctx.lineWidth=2;ctx.stroke()
     ctx.shadowBlur=0
 
-    // Direction arrow (shows where car is going)
+    // Direction arrow
     if(angle!==null){
         ctx.rotate(angle)
-        ctx.fillStyle="rgba(255,255,255,0.85)"
-        ctx.beginPath()
-        ctx.moveTo(r*0.55,0);ctx.lineTo(r*0.1,-r*0.25);ctx.lineTo(r*0.1,r*0.25)
-        ctx.closePath();ctx.fill()
+        ctx.fillStyle="rgba(255,255,255,0.9)"
+        ctx.beginPath();ctx.moveTo(r*0.55,0);ctx.lineTo(r*0.1,-r*0.25);ctx.lineTo(r*0.1,r*0.25);ctx.closePath();ctx.fill()
     }
-
-    // "ME" dot
     if(p.id===myId){
         ctx.rotate(angle?-angle:0)
-        ctx.beginPath();ctx.arc(0,-r-10,5,0,Math.PI*2)
+        ctx.beginPath();ctx.arc(0,-r-11,5,0,Math.PI*2)
         ctx.fillStyle="#ffd700";ctx.shadowColor="#ffd700";ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0
     }
-
     ctx.restore()
 
-    // Name above car
-    ctx.save();ctx.translate(x,y)
-    ctx.textAlign="center";ctx.font="bold 11px 'Segoe UI',sans-serif"
-    ctx.fillStyle="rgba(0,0,0,0.6)"
-    ctx.fillText(p.name||"",1,-(r+14)+1)
-    ctx.fillStyle="#ffffff";ctx.fillText(p.name||"",0,-(r+14))
-    ctx.restore()
+    // Name
+    ctx.save();ctx.translate(x,y);ctx.textAlign="center";ctx.font="bold 11px 'Segoe UI',sans-serif"
+    ctx.fillStyle="rgba(0,0,0,0.6)";ctx.fillText(p.name||"",1,-(r+14)+1)
+    ctx.fillStyle="#fff";ctx.fillText(p.name||"",0,-(r+14));ctx.restore()
 
-    // Dash cooldown arc (thin ring)
-    if(!dashing && p.dashCd>0){
+    // Dash cooldown arc
+    if(!dashing&&p.dashCd>0){
         const pct=1-p.dashCd/DASH_CD
         ctx.save();ctx.translate(x,y)
-        ctx.beginPath();ctx.arc(0,0,r+4,-Math.PI/2,-Math.PI/2+Math.PI*2*pct)
-        ctx.strokeStyle="rgba(200,100,255,0.7)";ctx.lineWidth=2;ctx.stroke()
-        ctx.restore()
+        ctx.beginPath();ctx.arc(0,0,r+5,-Math.PI/2,-Math.PI/2+Math.PI*2*pct)
+        ctx.strokeStyle="rgba(200,100,255,0.75)";ctx.lineWidth=2.5;ctx.stroke();ctx.restore()
     }
 }
 
-function shadeColor(hex, amt){
+function shadeColor(hex,amt){
+    if(!hex||hex[0]!=="#") return hex||"#888"
     let r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16)
     r=Math.max(0,Math.min(255,r+amt));g=Math.max(0,Math.min(255,g+amt));b=Math.max(0,Math.min(255,b+amt))
     return `rgb(${r},${g},${b})`
 }
 
-// Boost trail (behind moving car)
+// ─── BOOST TRAIL — custom image support ──────────────────────────
 function updateTrails(dt){
     getPlayers().forEach(p=>{
         if(!p.trailPts) p.trailPts=[]
@@ -451,22 +473,36 @@ function updateTrails(dt){
         const dashing=p.id===myId?(local.ready&&local.dashing):p.dashing
         if(boosting||dashing){
             p.trailPts.unshift({x:rx,y:ry,dash:dashing})
-            if(p.trailPts.length>20) p.trailPts.pop()
+            if(p.trailPts.length>22) p.trailPts.pop()
         } else { if(p.trailPts.length) p.trailPts.pop() }
     })
 }
+
 function drawTrails(){
     getPlayers().forEach(p=>{
         if(!p.trailPts||p.trailPts.length<2) return
         const isBlue=p.team==="blue"
-        const baseColor=p.trailPts[0].dash?"#cc44ff":(isBlue?(settings.blueColor||"#00aaff"):(settings.orangeColor||"#ff6600"))
+        const isDash=p.trailPts[0].dash
+        const boostImgSrc=p.boostTrail?`assets/boost/${p.boostTrail}`:null
+        const baseColor=isDash?"#cc44ff":(isBlue?(settings.blueColor||"#00aaff"):(settings.orangeColor||"#ff6600"))
         ctx.save()
         p.trailPts.forEach((pt,i)=>{
-            const t=1-i/p.trailPts.length;ctx.globalAlpha=t*0.55
-            ctx.shadowColor=baseColor;ctx.shadowBlur=10
-            ctx.beginPath();ctx.arc(pt.x,pt.y,CAR_R*0.6*t,0,Math.PI*2)
+            const t=1-i/p.trailPts.length
+            if(boostImgSrc&&!isDash){
+                const img=imgCache[boostImgSrc]
+                if(img&&img.complete&&img.naturalWidth>0){
+                    const sz=CAR_R*1.4*t
+                    ctx.globalAlpha=t*0.8
+                    ctx.drawImage(img,pt.x-sz/2,pt.y-sz/2,sz,sz)
+                    return
+                }
+            }
+            // Fallback: coloured glow circle
+            ctx.globalAlpha=t*0.55;ctx.shadowColor=baseColor;ctx.shadowBlur=10
+            ctx.beginPath();ctx.arc(pt.x,pt.y,CAR_R*0.65*t,0,Math.PI*2)
             ctx.fillStyle=baseColor;ctx.fill()
-        });ctx.restore()
+        })
+        ctx.restore()
     })
 }
 
@@ -477,7 +513,6 @@ function drawBall(){
     const g=ctx.createRadialGradient(-BALL_R*0.35,-BALL_R*0.35,1,0,0,BALL_R)
     g.addColorStop(0,"#ffffff");g.addColorStop(0.3,"#d0e8ff");g.addColorStop(0.7,"#6aabdd");g.addColorStop(1,"#1a3a55")
     ctx.beginPath();ctx.arc(0,0,BALL_R,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();ctx.shadowBlur=0
-    // Rotating hex
     ctx.rotate(ballAngle)
     for(let i=0;i<6;i++){
         const a=(i/6)*Math.PI*2;hexPath(Math.cos(a)*BALL_R*0.52,Math.sin(a)*BALL_R*0.52,BALL_R*0.23)
@@ -485,7 +520,6 @@ function drawBall(){
     }
     hexPath(0,0,BALL_R*0.26);ctx.strokeStyle="rgba(0,180,255,0.6)";ctx.lineWidth=1.3;ctx.stroke()
     ctx.restore()
-    // Specular
     ctx.save();ctx.translate(ball.x,ball.y)
     ctx.beginPath();ctx.ellipse(-BALL_R*0.28,-BALL_R*0.32,BALL_R*0.22,BALL_R*0.12,-0.5,0,Math.PI*2)
     ctx.fillStyle="rgba(255,255,255,0.35)";ctx.fill();ctx.restore()
@@ -496,7 +530,7 @@ function hexPath(cx,cy,r){
     ctx.closePath()
 }
 
-// Canvas scaling
+// Canvas scale
 function resize(){
     const scale=Math.min(window.innerWidth/W,window.innerHeight/H)
     canvas.style.width=(W*scale)+"px";canvas.style.height=(H*scale)+"px"
@@ -508,8 +542,8 @@ let lastTs=0, prevDashing=false
 function loop(ts){
     const dt=Math.min((ts-lastTs)/1000,0.05);lastTs=ts
 
-    if(local.ready){
-        // Detect dash start for particle burst
+    // Freeze local prediction during kickoff countdown
+    if(local.ready && gamePhase==="playing"){
         if(local.dashing&&!prevDashing) spawnDashParticles(local.x,local.y)
         prevDashing=local.dashing
         physicsStep(local,getInput(),dt)
@@ -521,20 +555,30 @@ function loop(ts){
         } else {
             if(p.rx===undefined){p.rx=p.x;p.ry=p.y}
             const a=1-Math.pow(0.01,dt*14)
-            p.rx+=(p.x-p.rx)*a; p.ry+=(p.y-p.ry)*a
+            p.rx+=(p.x-p.rx)*a;p.ry+=(p.y-p.ry)*a
         }
-        // Dash particle burst for remote players
         if(p.id!==myId&&p.dashing&&!p._wasDashing) spawnDashParticles(p.rx,p.ry)
         p._wasDashing=p.dashing
+        if(p.id===myId) p.dashCd=local.ready?local.dashCd:(p.dashCd||0)
     })
 
-    updateParticles(dt); updateTrails(dt)
+    updateParticles(dt);updateTrails(dt)
     ballAngle+=(ball.spin||0)*dt*0.5+dt*0.8
     padAng+=dt*1.6
 
-    ctx.clearRect(0,0,W,H)
-    drawArena(); drawBoostPads(); drawTrails(); drawParticles(); drawBall()
+    // Dim overlay — animate toward target
+    const dimTarget=gamePhase==="goal"||gamePhase==="over"?0.55:0
+    dimAlpha+=(dimTarget-dimAlpha)*Math.min(1,dt*4)
 
+    ctx.clearRect(0,0,W,H)
+    drawArena();drawBoostPads();drawTrails();drawParticles();drawBall()
+
+    // Dim overlay (everything except scoreboard)
+    if(dimAlpha>0.01){
+        ctx.fillStyle=`rgba(0,0,0,${dimAlpha})`; ctx.fillRect(0,0,W,H)
+    }
+
+    // Draw cars on top of dim
     getPlayers().forEach(p=>{
         const x=p.id===myId?(local.ready?local.x:p.x):(p.rx??p.x)
         const y=p.id===myId?(local.ready?local.y:p.y):(p.ry??p.y)
@@ -542,10 +586,18 @@ function loop(ts){
         const vy=p.id===myId?(local.ready?local.vy:0):p.vy||0
         const dashing=p.id===myId?(local.ready&&local.dashing):p.dashing
         const boosting=p.id===myId?(local.ready&&getInput().shift&&local.boost>0):p.isBoosting
-        // Pass dashCd for cooldown arc
-        if(p.id===myId) p.dashCd=local.ready?local.dashCd:(p.dashCd||0)
         drawCar(p,x,y,vx,vy,dashing,boosting)
     })
+
+    // Kickoff countdown overlay (large number, above everything)
+    if(gamePhase==="kickoffCountdown"&&kickoffTimer>0){
+        const kNum=Math.ceil(kickoffTimer)
+        ctx.save()
+        ctx.textAlign="center";ctx.font="bold 160px 'Barlow Condensed','Segoe UI',sans-serif"
+        ctx.fillStyle="rgba(255,255,255,0.08)"
+        ctx.fillText(kNum,W/2,H/2+60)
+        ctx.restore()
+    }
 
     requestAnimationFrame(loop)
 }

@@ -4,21 +4,21 @@
 <meta charset="UTF-8">
 <title>Rocket Hax</title>
 <link rel="stylesheet" href="style.css">
+<style>
+.preview-thumb{width:48px;height:48px;border-radius:6px;object-fit:contain;border:1px solid rgba(255,255,255,0.15);background:#111;display:none;}
+.preview-row{display:flex;align-items:center;gap:10px;}
+.preview-row select{flex:1;}
+</style>
 </head>
 <body class="menu">
 
 <h1 class="title">ROCKET HAX</h1>
 
 <div class="setupBox">
-
-  <!-- PFP preview -->
   <img id="pfp-preview" src="assets/default_pfp.png" class="pfpPreview">
   <input type="file" id="pfp-input" accept="image/*" style="font-size:11px">
-
-  <!-- Name -->
   <input id="username" placeholder="Tu nombre" oninput="checkSpecialTitle()">
 
-  <!-- Title -->
   <select id="player-title" onchange="updateTitlePreview()">
     <option value="ROOKIE|#aaaaaa">Rookie</option>
     <option value="CHAMPION|#ffd700">Champion</option>
@@ -31,7 +31,6 @@
     <option value="ooeeoo|#aaffee">ooeeoo</option>
   </select>
 
-  <!-- Banner -->
   <select id="banner-select" onchange="previewBanner()">
     <option value="Default.png">Banner Clásico</option>
     <option value="Calculated.png">Fríamente Calculado</option>
@@ -42,20 +41,61 @@
     <option value="Frost.png">Frost</option>
   </select>
 
-  <!-- Banner + title preview -->
   <div id="banner-preview-container">
     <img id="banner-preview-img" src="assets/banners/Default.png">
     <div id="title-preview">ROOKIE</div>
   </div>
 
-  <!-- Buttons -->
-  <button onclick="createRoom()">CREAR SALA</button>
+  <!-- Decal selector -->
+  <div class="preview-row">
+    <select id="decal-select" onchange="previewDecal()">
+      <option value="">Sin decal</option>
+      <optgroup label="PNG Decals">
+        <option value="decal1.png">Decal 1</option>
+        <option value="decal2.png">Decal 2</option>
+        <option value="decal3.png">Decal 3</option>
+        <option value="decal4.png">Decal 4</option>
+        <option value="decal5.png">Decal 5</option>
+        <option value="decal6.png">Decal 6</option>
+        <option value="decal7.png">Decal 7</option>
+        <option value="decal8.png">Decal 8</option>
+        <option value="decal9.png">Decal 9</option>
+        <option value="decal10.png">Decal 10</option>
+      </optgroup>
+      <optgroup label="GIF Decals (animated)">
+        <option value="decal11.gif">Decal 11</option>
+        <option value="decal12.gif">Decal 12</option>
+        <option value="decal13.gif">Decal 13</option>
+        <option value="decal14.gif">Decal 14</option>
+        <option value="decal15.gif">Decal 15</option>
+      </optgroup>
+    </select>
+    <img id="decal-preview" class="preview-thumb">
+  </div>
 
+  <!-- Boost trail selector -->
+  <div class="preview-row">
+    <select id="boost-select" onchange="previewBoost()">
+      <option value="">Trail por defecto</option>
+      <option value="boost1.png">Boost 1</option>
+      <option value="boost2.png">Boost 2</option>
+      <option value="boost3.png">Boost 3</option>
+      <option value="boost4.png">Boost 4</option>
+      <option value="boost5.png">Boost 5</option>
+      <option value="boost6.png">Boost 6</option>
+      <option value="boost7.png">Boost 7</option>
+      <option value="boost8.png">Boost 8</option>
+      <option value="boost9.png">Boost 9</option>
+      <option value="boost10.png">Boost 10</option>
+    </select>
+    <img id="boost-preview" class="preview-thumb">
+  </div>
+
+  <button onclick="createRoom()">CREAR SALA</button>
   <div style="display:flex;gap:8px">
     <input id="roomCode" placeholder="Código sala" style="flex:1">
     <button onclick="joinRoom()" style="padding:10px 14px">UNIRSE</button>
   </div>
-
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
