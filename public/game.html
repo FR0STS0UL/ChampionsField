@@ -75,7 +75,7 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;font-family:
   <div id="connecting">
     <div class="spinner"></div>
     <h2 id="connecting-title">CONECTANDO</h2>
-    <p id="connecting-msg">Estableciendo conexión P2P...</p>
+    <p id="connecting-msg">Uniéndose al servidor...</p>
   </div>
 
   <!-- RLCS Scoreboard -->
@@ -244,10 +244,12 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;font-family:
         players.forEach(p=>{ const lp=ensurePlayer(p.id,p); Object.assign(lp,p) })
         if(s) settings=s
         updateSidePanels(players)
+        // Hide overlay always — if phase=lobby we wait for gameStarted,
+        // if phase=playing/kickoff we're already in game
+        hideOverlay()
         if(phase==="lobby"){
-            // Show lobby waiting state, hide connecting
-            showMsg("En el lobby — esperando inicio...")
-            hideOverlay()
+            // Re-show scoreboard but display a "waiting" message briefly
+            // Actually just show the game canvas ready to play
         }
     })
 
