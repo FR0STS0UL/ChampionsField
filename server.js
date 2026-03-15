@@ -19,7 +19,7 @@ const GOAL_R={x:WALL_R,y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const BALL_R=24,CAR_R=22,DT=1/60
 const ACCEL=900,FRICTION=0.88,MAX_SPD=580
 const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38
-const DASH_SPEED=MAX_SPD*2.0,DASH_DUR=0.18,DASH_CD=1.2
+const DASH_SPEED=MAX_SPD*1.3,DASH_DUR=0.16,DASH_CD=1.0
 const PADS=[
     {x:180,y:180,type:"big",value:100},{x:W-180,y:180,type:"big",value:100},
     {x:180,y:H-180,type:"big",value:100},{x:W-180,y:H-180,type:"big",value:100},
@@ -227,7 +227,9 @@ setInterval(()=>{
                 b.x+=nx*(minD-dist);b.y+=ny*(minD-dist)*0.5
                 const rvx=b.vx-p.vx,rvy=b.vy-p.vy,relV=rvx*nx+rvy*ny
                 if(relV<0){
-                    const imp=Math.max(200,-(1.5)*relV+Math.hypot(p.vx,p.vy)*0.85)
+                    // Cap car speed contribution so dash doesn't launch ball across the map
+                    const cspd=Math.min(Math.hypot(p.vx,p.vy), MAX_SPD*1.1)
+                    const imp=Math.min(Math.max(200,-(1.4)*relV+cspd*0.6), 900)
                     b.vx+=nx*imp;b.vy+=ny*imp;b.spin+=nx*imp*0.05
                 }
             }

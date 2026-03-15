@@ -19,7 +19,13 @@ socket.on("connect", ()=>{
 
 socket.on("lobbyJoined", ({myId:id, players, settings, phase})=>{
     myId = id
-    // Host = whoever joined first (players[0])
+
+    // If game already started, go straight to game page
+    if(phase === "playing" || phase === "kickoffCountdown" || phase === "goal"){
+        window.location.href = `game.html?room=${room}`
+        return
+    }
+
     amHost = (id === players[0]?.id)
     currentPlayers=players; currentSettings=settings
 
