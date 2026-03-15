@@ -287,10 +287,20 @@ function showGoalBanner(team){
 function showGameOver(sc){
     const bn=settings.blueTeamName||"BLUE",on=settings.orangeTeamName||"ORANGE"
     const w=sc.blue>sc.orange?bn:sc.orange>sc.blue?on:"EMPATE"
-    document.getElementById("goalWord").textContent=w
-    document.getElementById("goalWord").style.color="#ffd700"
-    document.getElementById("goalSub").textContent=`${sc.blue} — ${sc.orange}`
+    const gw=document.getElementById("goalWord")
+    const gs=document.getElementById("goalSub")
+    gw.textContent=w+" GANA"
+    gw.style.color="#ffd700"
+    gw.style.textShadow="0 0 60px #ffd70088"
+    gs.textContent=`${sc.blue} — ${sc.orange}  ·  Volviendo al lobby...`
     document.getElementById("goalBanner").classList.add("show")
+    // Return to lobby after 5s so players can choose teams and restart
+    setTimeout(()=>{
+        const params=new URLSearchParams(window.location.search)
+        const room=params.get("room")
+        if(room) window.location.href="lobby.html?room="+room
+        else window.location.href="/"
+    },5000)
 }
 function updateSidePanels(pList){
     const bd=document.getElementById("blueTeam"),od=document.getElementById("orangeTeam")
@@ -437,12 +447,19 @@ function drawBoostPads(){
 
 // ─── CAR ─────────────────────────────────────────────────────────
 function tintCanvas(src,hexColor){
-    const key="tint_"+src+"_"+hexColor;if(imgCache[key])return imgCache[key]
-    const si=imgCache[src];if(!si||!si.complete||!si.naturalWidth)return null
-    const oc=document.createElement("canvas");oc.width=si.naturalWidth;oc.height=si.naturalHeight
-    const c=oc.getContext("2d");c.drawImage(si,0,0)
-    c.globalCompositeOperation="source-atop";c.fillStyle=hexColor+"cc";c.fillRect(0,0,oc.width,oc.height)
-    imgCache[key]=oc;return oc
+    const key="tint_"+src+"_"+hexColor; if(imgCache[key])return imgCache[key]
+    const si=imgCache[src]; if(!si||!si.complete||!si.naturalWidth)return null
+    const oc=document.createElement("canvas"); oc.width=si.naturalWidth; oc.height=si.naturalHeight
+    const c=oc.getContext("2d")
+    // Draw tinted color first, then multiply original on top
+    // This makes white→teamColor, black→black, grey→mid-tone
+    c.fillStyle=hexColor; c.fillRect(0,0,oc.width,oc.height)
+    c.globalCompositeOperation="multiply"
+    c.drawImage(si,0,0)
+    // Restore alpha from original (so transparent areas stay transparent)
+    c.globalCompositeOperation="destination-in"
+    c.drawImage(si,0,0)
+    imgCache[key]=oc; return oc
 }
 function drawCar(p,x,y,vx,vy,dashing,isBoosting){
     const isBlue=p.team==="blue"
@@ -465,9 +482,16 @@ function drawCar(p,x,y,vx,vy,dashing,isBoosting){
         }
     }
     const grad=ctx.createRadialGradient(-r*.3,-r*.3,0,0,0,r)
-    grad.addColorStop(0,decalSrc?"rgba(255,255,255,0.12)":"rgba(255,255,255,0.22)")
-    grad.addColorStop(0.5,decalSrc?teamColor+"bb":teamColor)
-    grad.addColorStop(1,shadeColor(teamColor,-45))
+    if(decalSrc){
+        // With decal: very thin overlay so decal shows through clearly
+        grad.addColorStop(0,"rgba(255,255,255,0.05)")
+        grad.addColorStop(0.5,"rgba(0,0,0,0)")
+        grad.addColorStop(1,shadeColor(teamColor,-60)+"44")
+    } else {
+        grad.addColorStop(0,"rgba(255,255,255,0.22)")
+        grad.addColorStop(0.5,teamColor)
+        grad.addColorStop(1,shadeColor(teamColor,-45))
+    }
     ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill()
     ctx.strokeStyle="rgba(255,255,255,0.45)";ctx.lineWidth=2;ctx.stroke();ctx.shadowBlur=0
     if(angle!==null){

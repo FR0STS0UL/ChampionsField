@@ -237,8 +237,17 @@ setInterval(()=>{
 
         room.matchTime-=dt
         if(room.matchTime<=0){
-            room.matchTime=0;room.phase="over"
+            room.matchTime=0; room.phase="over"
             io.to(code).emit("gameOver",room.scores)
+            // Reset to lobby after 6s so returning players can restart
+            setTimeout(()=>{
+                if(rooms[code]){
+                    rooms[code].phase="lobby"
+                    rooms[code].scores={blue:0,orange:0}
+                    rooms[code].settings.gameNum=1
+                    io.to(code).emit("lobbyUpdate",{players:rooms[code].players,settings:rooms[code].settings})
+                }
+            },6000)
         }
         io.to(code).emit("state",buildState(room))
     }
@@ -263,14 +272,17 @@ function buildState(room){
     }
 }
 function handleGoal(room,code,scorer){
-    room.phase="goal";room.scores[scorer]++
+    room.phase="goal"; room.scores[scorer]++
     room.settings.gameNum=(room.settings.gameNum||1)+1
+    // Freeze time at current value — don't reset it
+    const frozenTime = room.matchTime
     io.to(code).emit("goal",{scorer,scores:room.scores,settings:room.settings})
     setTimeout(()=>{
         reposition(room)
         room.ball={x:W/2,y:H/2,vx:0,vy:0,spin:0}
         room.pads.forEach(p=>{p.active=true;p.timer=0})
-        room.matchTime=300;room.phase="kickoffCountdown";room.kickoffTimer=3
+        room.matchTime=frozenTime   // resume from where it was
+        room.phase="kickoffCountdown"; room.kickoffTimer=3
         io.to(code).emit("kickoff",{scores:room.scores,settings:room.settings})
     },3000)
 }
