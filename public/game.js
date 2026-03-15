@@ -222,19 +222,8 @@ document.addEventListener("keyup",e=>{
 })
 function getInput(){return{w:!!keys.w,a:!!keys.a,s:!!keys.s,d:!!keys.d,shift:!!keys.shift,dash:!!keys.dash}}
 
-// Input loop — sends to host or sets directly if host
-let _seq=0
-setInterval(()=>{
-    const inp=getInput(); _seq++
-    if(isHost){
-        hostSetInput(inp)
-        // Host still buffers for prediction consistency
-        local.ready=true
-    } else {
-        clientSendInput(inp)
-        clientBufferInput(inp,_seq)
-    }
-},1000/60)
+// Input loop is handled by game.html bootstrap (socket.emit "input")
+// game.js only needs getInput() for local prediction in the render loop
 
 // ─── HUD ─────────────────────────────────────────────────────────
 function updateHUD(){
