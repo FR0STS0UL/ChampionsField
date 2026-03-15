@@ -191,9 +191,8 @@ function handleGoal(gs,scorer){
 // ─── WEBRTC ──────────────────────────────────────────────────────
 // Creates a peer connection and DataChannel for one client.
 // sigSocket = the signaling socket (works from lobby OR game page).
-async function createPeerConnection(peerId, sigSocket){
+async function createPeerConnection(peerId, sigSocket, playerDataForPeer){
     if(peers[peerId]){
-        // Already have a connection — tear it down and redo
         try{peers[peerId].dc.close();peers[peerId].pc.close()}catch{}
         delete peers[peerId]
     }
@@ -204,7 +203,25 @@ async function createPeerConnection(peerId, sigSocket){
     dc.onopen=()=>{
         console.log("[host] DataChannel open →",peerId)
         if(gameState){
-            // Game already running — send init packet
+            // Add player to game if not already there (late joiner)
+            if(!gameState.players.find(p=>p.id===peerId)){
+                const team = (playerDataForPeer && playerDataForPeer.team) || "blue"
+                const sameTeam = gameState.players.filter(p=>p.team===team)
+                const sp = spawnPos(team, sameTeam.length, sameTeam.length+1)
+                gameState.players.push({
+                    id:peerId, team,
+                    name:(playerDataForPeer&&playerDataForPeer.name)||"Jugador",
+                    title:(playerDataForPeer&&playerDataForPeer.title)||"",
+                    titleColor:(playerDataForPeer&&playerDataForPeer.titleColor)||"#aaa",
+                    pfp:(playerDataForPeer&&playerDataForPeer.pfp)||"assets/default_pfp.png",
+                    banner:(playerDataForPeer&&playerDataForPeer.banner)||"assets/banners/Default.png",
+                    decal:(playerDataForPeer&&playerDataForPeer.decal)||null,
+                    boostTrail:(playerDataForPeer&&playerDataForPeer.boostTrail)||null,
+                    x:sp.x,y:sp.y,vx:0,vy:0,boost:33,
+                    dashing:false,dashTimer:0,dashCd:0,dashVx:0,dashVy:0,
+                    input:{},lastSeq:0
+                })
+            }
             dc.send(JSON.stringify({
                 type:"init", myId:peerId,
                 players:gameState.players, settings:gameState.settings
@@ -276,7 +293,7 @@ function hostSetInput(inp){
     if(me) me.input=inp
 }
 async function onPeerJoined(peerId, playerData, sigSocket){
-    await createPeerConnection(peerId, sigSocket)
+    await createPeerConnection(peerId, sigSocket, playerData)
 }
 function onRtcAnswer(from, answer){
     const peer=peers[from]; if(!peer) return
