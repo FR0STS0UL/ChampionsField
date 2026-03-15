@@ -5,132 +5,57 @@
 <title>Rocket Hax</title>
 <link rel="stylesheet" href="style.css">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,800&family=Barlow:wght@400;600;700&display=swap');
-
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Barlow:wght@400;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;background:#050810;overflow:hidden;font-family:'Barlow',sans-serif;color:#fff}
 #gameWrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;}
 #game{display:block;max-width:100vw;max-height:100vh;}
 
-/* ══════════════════════════════════════
-   RLCS SCOREBOARD
-══════════════════════════════════════ */
-#scoreboard{
-    position:absolute;top:0;left:50%;transform:translateX(-50%);
-    display:flex;flex-direction:column;align-items:center;
-    pointer-events:none;user-select:none;z-index:20;
-    font-family:'Barlow Condensed',sans-serif;
-}
-
-/* Row 1 — Series title */
-#sb-top{
-    background:rgba(6,8,18,0.96);
-    border:1px solid rgba(255,255,255,0.1);border-top:none;
-    padding:4px 28px;
-    font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;
-    color:rgba(255,255,255,0.55);white-space:nowrap;
-    border-bottom:1px solid rgba(255,255,255,0.06);
-}
+/* ── SCOREBOARD ── */
+#scoreboard{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;pointer-events:none;user-select:none;z-index:20;font-family:'Barlow Condensed',sans-serif;}
+#sb-top{background:rgba(6,8,18,0.96);border:1px solid rgba(255,255,255,0.1);border-top:none;padding:4px 28px;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.55);white-space:nowrap;border-bottom:1px solid rgba(255,255,255,0.06);}
 #sb-series-title{color:#fff;}
-
-/* Row 2 — Teams + Score + Timer */
-#sb-main{
-    display:flex;align-items:stretch;
-    background:rgba(6,8,18,0.96);
-    border:1px solid rgba(255,255,255,0.1);border-top:none;
-    overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.7);
-}
+#sb-main{display:flex;align-items:stretch;background:rgba(6,8,18,0.96);border:1px solid rgba(255,255,255,0.1);border-top:none;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.7);}
 .sb-team-block{display:flex;align-items:center;}
 .sb-bar{width:8px;height:100%;flex-shrink:0;}
-.sb-team-block.left  .sb-bar{order:-1;}
+.sb-team-block.left .sb-bar{order:-1;}
 .sb-team-block.right .sb-bar{order:99;}
-.sb-team-name{
-    font-size:22px;font-weight:900;letter-spacing:1px;text-transform:uppercase;
-    color:#fff;padding:7px 16px 7px 12px;
-}
+.sb-team-name{font-size:22px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#fff;padding:7px 16px 7px 12px;}
 .sb-team-block.right .sb-team-name{padding:7px 12px 7px 16px;}
-.sb-score{
-    font-size:40px;font-weight:900;color:#fff;
-    padding:4px 10px;min-width:46px;text-align:center;
-    background:rgba(255,255,255,0.05);
-    border-left:1px solid rgba(255,255,255,0.08);
-    border-right:1px solid rgba(255,255,255,0.08);
-    line-height:1;display:flex;align-items:center;justify-content:center;
-}
-#sb-center{
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:5px 20px;
-    border-left:1px solid rgba(255,255,255,0.08);
-    border-right:1px solid rgba(255,255,255,0.08);
-    background:rgba(255,255,255,0.02);min-width:96px;
-}
+.sb-score{font-size:40px;font-weight:900;color:#fff;padding:4px 10px;min-width:46px;text-align:center;background:rgba(255,255,255,0.05);border-left:1px solid rgba(255,255,255,0.08);border-right:1px solid rgba(255,255,255,0.08);line-height:1;display:flex;align-items:center;justify-content:center;}
+#sb-center{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 20px;border-left:1px solid rgba(255,255,255,0.08);border-right:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);min-width:96px;}
 #hud-timer{font-size:28px;font-weight:800;letter-spacing:2px;line-height:1;transition:color .3s,font-size .2s;}
-
-/* Row 3 — Game N | Best of X */
-#sb-bottom{
-    background:rgba(4,6,14,0.96);
-    border:1px solid rgba(255,255,255,0.08);border-top:none;
-    padding:3px 20px;
-    font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
-    color:rgba(255,255,255,0.35);display:flex;gap:8px;align-items:center;
-    justify-content:center;white-space:nowrap;
-}
+#sb-bottom{background:rgba(4,6,14,0.96);border:1px solid rgba(255,255,255,0.08);border-top:none;padding:3px 20px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.35);display:flex;gap:8px;align-items:center;justify-content:center;white-space:nowrap;}
 #sb-game-num,#sb-best-of{color:rgba(255,255,255,0.45);}
 .sb-pip{color:rgba(255,255,255,0.15);}
 
-/* ── SIDE PANELS ── */
-#blueTeam,#orangeTeam{
-    position:absolute;top:100px;width:210px;
-    display:flex;flex-direction:column;gap:5px;pointer-events:none;z-index:10;
-}
-#blueTeam  {left:6px;}
-#orangeTeam{right:6px;}
+/* ── PANELS ── */
+#blueTeam,#orangeTeam{position:absolute;top:100px;width:210px;display:flex;flex-direction:column;gap:5px;pointer-events:none;z-index:10;}
+#blueTeam{left:6px;}#orangeTeam{right:6px;}
 
-/* ── BOOST CIRCLE ── */
-#boost-wrap{
-    position:absolute;bottom:14px;left:50%;transform:translateX(-50%);
-    display:flex;flex-direction:column;align-items:center;gap:3px;
-    pointer-events:none;z-index:10;
-}
+/* ── BOOST ── */
+#boost-wrap{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none;z-index:10;}
 #boost-circle-container{position:relative;width:72px;height:72px;}
 #boost-canvas{position:absolute;inset:0;width:72px;height:72px;}
-#boost-circle-val{
-    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;color:#fff;
-}
+#boost-circle-val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;color:#fff;}
 #boost-label{font-size:9px;letter-spacing:3px;opacity:.3;text-transform:uppercase;font-family:'Barlow',sans-serif;}
 
-/* ── KICKOFF COUNTDOWN ── */
-#kickoff-countdown{
-    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-    font-family:'Barlow Condensed',sans-serif;font-size:120px;font-weight:900;
-    color:#fff;text-shadow:0 0 40px rgba(255,255,255,0.4);
-    pointer-events:none;display:none;z-index:30;
-    animation:pulseCount .9s ease-in-out infinite;
-}
+/* ── KICKOFF / GOAL / GAMEOVER ── */
+#kickoff-countdown{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Barlow Condensed',sans-serif;font-size:120px;font-weight:900;color:#fff;text-shadow:0 0 40px rgba(255,255,255,0.4);pointer-events:none;display:none;z-index:30;animation:pulseCount .9s ease-in-out infinite;}
 @keyframes pulseCount{0%,100%{transform:translate(-50%,-50%) scale(1);}50%{transform:translate(-50%,-50%) scale(1.08);}}
-
-/* ── GOAL BANNER ── */
-#goalBanner{
-    position:absolute;inset:0;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;
-    pointer-events:none;opacity:0;transition:opacity .3s;z-index:25;
-}
+#goalBanner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .3s;z-index:25;}
 #goalBanner.show{opacity:1;}
-#goalWord{
-    font-family:'Barlow Condensed',sans-serif;font-size:100px;font-weight:900;
-    letter-spacing:14px;text-transform:uppercase;
-    -webkit-text-stroke:2px rgba(255,255,255,0.15);
-}
+#goalWord{font-family:'Barlow Condensed',sans-serif;font-size:100px;font-weight:900;letter-spacing:14px;text-transform:uppercase;-webkit-text-stroke:2px rgba(255,255,255,0.15);}
 #goalSub{font-size:16px;letter-spacing:6px;opacity:.6;margin-top:8px;font-weight:600;text-transform:uppercase;}
-
-/* ── CONTROLS HINT ── */
-#ctrlHint{
-    position:absolute;bottom:10px;left:50%;transform:translateX(-50%);
-    font-size:9px;letter-spacing:1.5px;opacity:.2;white-space:nowrap;
-    text-transform:uppercase;margin-bottom:90px;color:#fff;z-index:5;
-}
+#ctrlHint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:9px;letter-spacing:1.5px;opacity:.2;white-space:nowrap;text-transform:uppercase;margin-bottom:90px;color:#fff;z-index:5;}
 #ctrlHint span{color:#aaffaa;opacity:1;}
+
+/* ── CONNECTING SCREEN ── */
+#connecting{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#050810;z-index:50;gap:16px;}
+#connecting h2{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#00aaff;}
+#connecting p{font-size:13px;opacity:.5;letter-spacing:1px;}
+.spinner{width:40px;height:40px;border:3px solid rgba(0,170,255,0.2);border-top-color:#00aaff;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
 
 /* ── PLAYER CARDS ── */
 .playerCard{display:flex;align-items:center;background:rgba(0,0,0,0.72);border-radius:4px;overflow:hidden;height:42px;width:200px;border:1px solid rgba(255,255,255,0.07);}
@@ -146,20 +71,23 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;font-family:
 <div id="gameWrap">
   <canvas id="game" width="1600" height="820"></canvas>
 
+  <!-- Connecting screen (hidden once P2P is ready) -->
+  <div id="connecting">
+    <div class="spinner"></div>
+    <h2 id="connecting-title">CONECTANDO</h2>
+    <p id="connecting-msg">Estableciendo conexión P2P...</p>
+  </div>
+
   <!-- RLCS Scoreboard -->
-  <div id="scoreboard">
-    <div id="sb-top">
-      <span id="sb-series-title">FRIENDLY MATCH</span>
-    </div>
+  <div id="scoreboard" style="display:none">
+    <div id="sb-top"><span id="sb-series-title">FRIENDLY MATCH</span></div>
     <div id="sb-main">
       <div class="sb-team-block left">
         <div class="sb-bar" id="sb-blue-block" style="background:#00aaff"></div>
         <div class="sb-team-name" id="sb-blue-name">BLUE</div>
       </div>
       <div class="sb-score" id="sb-blue-score">0</div>
-      <div id="sb-center">
-        <div id="hud-timer">5:00</div>
-      </div>
+      <div id="sb-center"><div id="hud-timer">5:00</div></div>
       <div class="sb-score" id="sb-orange-score">0</div>
       <div class="sb-team-block right">
         <div class="sb-team-name" id="sb-orange-name">ORANGE</div>
@@ -167,18 +95,14 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;font-family:
       </div>
     </div>
     <div id="sb-bottom">
-      <span id="sb-game-num">GAME 1</span>
-      <span class="sb-pip">|</span>
-      <span id="sb-best-of">BEST OF 7</span>
+      <span id="sb-game-num">GAME 1</span><span class="sb-pip">|</span><span id="sb-best-of">BEST OF 7</span>
     </div>
   </div>
 
-  <!-- Side panels -->
   <div id="blueTeam"></div>
   <div id="orangeTeam"></div>
 
-  <!-- Boost circle -->
-  <div id="boost-wrap">
+  <div id="boost-wrap" style="display:none">
     <div id="boost-circle-container">
       <canvas id="boost-canvas" width="72" height="72"></canvas>
       <div id="boost-circle-val">33</div>
@@ -186,22 +110,159 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;font-family:
     <div id="boost-label">Boost</div>
   </div>
 
-  <!-- Kickoff countdown -->
   <div id="kickoff-countdown">3</div>
 
-  <!-- Goal banner -->
   <div id="goalBanner">
     <div id="goalWord">¡GOL!</div>
     <div id="goalSub">INCREÍBLE</div>
   </div>
 
-  <!-- Controls hint -->
   <div id="ctrlHint">
     <span>WASD</span> mover · <span>Shift</span> boost · <span>Espacio</span> dash
   </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
+<script src="host.js"></script>
+<script src="client.js"></script>
 <script src="game.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  GAME PAGE BOOTSTRAP
+//  Reads URL params, detects host vs client, wires P2P.
+// ═══════════════════════════════════════════════════════════════
+(async function() {
+    const params      = new URLSearchParams(window.location.search)
+    const roomCode    = params.get("room")
+    const amHost      = params.get("host") === "1"
+    const playerData  = JSON.parse(localStorage.getItem("playerData") || "{}")
+
+    // Signaling socket — used ONLY for WebRTC handshake, then idle
+    const sigSocket = io()
+
+    function showConnecting(msg) {
+        document.getElementById("connecting-msg").textContent = msg
+    }
+    function hideConnecting() {
+        document.getElementById("connecting").style.display    = "none"
+        document.getElementById("scoreboard").style.display   = "flex"
+        document.getElementById("boost-wrap").style.display   = "flex"
+    }
+
+    // ── HOST PATH ──────────────────────────────────────────────
+    if (amHost) {
+        isHost = true
+        showConnecting("Esperando jugadores...")
+
+        sigSocket.on("connect", () => {
+            HOST_ID = sigSocket.id
+            myId    = sigSocket.id
+        })
+
+        // When a peer joins the room, create WebRTC offer
+        sigSocket.on("peerJoined", async ({ peerId, playerData: pd }) => {
+            showConnecting(`Conectando con ${pd.name||"jugador"}...`)
+            await onPeerJoined(peerId, pd, sigSocket)
+        })
+
+        // Handle WebRTC answers from peers
+        sigSocket.on("rtc:answer", ({ from, answer }) => onRtcAnswer(from, answer))
+        sigSocket.on("rtc:ice",    ({ from, candidate }) => onRtcIce(from, candidate))
+
+        // Peer disconnected
+        sigSocket.on("peerLeft", ({ peerId }) => {
+            const peer = peers[peerId]
+            if (peer) { try{ peer.dc.close(); peer.pc.close() }catch{} }
+            delete peers[peerId]
+            // Update player list in game state
+            if (gameState) {
+                gameState.players = gameState.players.filter(p => p.id !== peerId)
+                // Broadcast updated player list to remaining clients
+                Object.values(peers).forEach(({dc}) => {
+                    if(dc.readyState === "open")
+                        dc.send(JSON.stringify({ type:"init", myId:"_", players:gameState.players, settings:gameState.settings }))
+                })
+            }
+        })
+
+        // "Start Game" button in lobby redirects here with ?host=1
+        // We wait for lobbyData in localStorage set by lobby.js before starting
+        const lobbyData = JSON.parse(localStorage.getItem("lobbyData") || "null")
+        if (lobbyData) {
+            // Give peers 1 second to receive DataChannel init after first connection
+            // Then start physics
+            const waitForPeers = () => {
+                const openCount = Object.values(peers).filter(p => p.dc && p.dc.readyState === "open").length
+                const totalPeers = (lobbyData.players.length - 1)  // minus host
+                if (openCount >= totalPeers || totalPeers === 0) {
+                    hostStartGame(lobbyData.players, lobbyData.settings)
+                    // Set host's own player in game state
+                    const me = gameState.players.find(p => p.id === HOST_ID)
+                    if (me) Object.assign(me, { name:playerData.name||me.name, decal:playerData.decal||null, boostTrail:playerData.boostTrail||null })
+                    // Init host renderer
+                    onGameInit({ myId: HOST_ID, players: gameState.players, settings: gameState.settings })
+                    hideConnecting()
+                    // Tell signaling server the game started
+                    sigSocket.emit("gameStarted", { room: roomCode })
+                    localStorage.removeItem("lobbyData")
+                } else {
+                    showConnecting(`Esperando ${totalPeers - openCount} jugador(es)...`)
+                    setTimeout(waitForPeers, 300)
+                }
+            }
+            setTimeout(waitForPeers, 500)
+        } else {
+            // Solo host testing
+            hostStartGame([{ id: sigSocket.id, ...playerData, team: playerData.team||"blue" }], {
+                blueTeamName:"BLUE", orangeTeamName:"ORANGE",
+                blueColor:"#00aaff", orangeColor:"#ff6600",
+                seriesTitle:"FRIENDLY MATCH", gameNum:1, bestOf:7
+            })
+            onGameInit({ myId: sigSocket.id, players: gameState.players, settings: gameState.settings })
+            hideConnecting()
+        }
+    }
+
+    // ── CLIENT PATH ────────────────────────────────────────────
+    else {
+        isHost = false
+        showConnecting("Conectando con el host...")
+
+        const hostId = localStorage.getItem("hostId")
+        if (!hostId) {
+            document.getElementById("connecting-title").textContent = "ERROR"
+            document.getElementById("connecting-msg").textContent   = "No se encontró el host. Vuelve al lobby."
+            return
+        }
+
+        sigSocket.on("connect", () => {
+            myId = sigSocket.id
+            // Now connect to host via WebRTC
+            clientConnect(hostId, sigSocket, sigSocket.id)
+            // Tell signaling server we're joining the game room
+            sigSocket.emit("joinLobby", { room: roomCode, ...playerData })
+        })
+
+        // WebRTC signaling — host sends us an offer
+        sigSocket.on("rtc:offer", ({ from, offer }) => onRtcOffer(from, offer))
+        sigSocket.on("rtc:ice",   ({ from, candidate }) => onRtcIce(from, candidate))
+
+        // Host disconnected
+        sigSocket.on("hostDisconnected", () => {
+            onGameEvent({ type: "hostDisconnected" })
+        })
+
+        // DataChannel connected → hide connecting screen
+        // (handled inside client.js → onClientConnected → calls onStateUpdate soon after)
+        const origOnStateUpdate = window.onStateUpdate
+        window.onStateUpdate = function(data) {
+            if (document.getElementById("connecting").style.display !== "none") {
+                hideConnecting()
+            }
+            onStateUpdate(data)
+        }
+    }
+})()
+</script>
 </body>
 </html>
