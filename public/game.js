@@ -109,12 +109,12 @@ function physicsStep(s,inp,dt){
 }
 
 function reconcile(srv){
-    local.x=srv.x;local.y=srv.y;local.vx=srv.vx||0;local.vy=srv.vy||0
-    local.boost=srv.boost;local.dashing=srv.dashing||false
-    local.dashTimer=srv.dashTimer||0;local.dashCd=srv.dashCd||0
+    local.x=srv.x; local.y=srv.y; local.vx=srv.vx||0; local.vy=srv.vy||0
+    local.boost=srv.boost; local.dashing=srv.dashing||false
+    local.dashTimer=srv.dashTimer||0; local.dashCd=srv.dashCd||0
     local.ready=true
-    // Re-simulate unacknowledged inputs
-    const buf=isHost?[]:clientGetInputBuf()
+    // Re-simulate inputs the server hasn't processed yet
+    const buf = window._inputBuf || []
     buf.filter(e=>e.seq>(srv.seq||0)).forEach(e=>physicsStep(local,e.inp,e.dt))
 }
 
