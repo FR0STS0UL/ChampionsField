@@ -26,7 +26,7 @@ const BALL_R=24,CAR_R=22
 // ─── PHYSICS CONSTANTS ───────────────────────────────────────────
 const DT=1/60
 const ACCEL=900,FRICTION=0.88,MAX_SPD=580
-const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38,BOOST_REGEN=9
+const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38,BOOST_REGEN=0  // no auto-regen, only pads
 const DASH_SPEED=MAX_SPD*2.0,DASH_DUR=0.18,DASH_CD=1.2
 
 // ─── PADS TEMPLATE ───────────────────────────────────────────────

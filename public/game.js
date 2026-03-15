@@ -17,7 +17,7 @@ const BALL_R=24,CAR_R=22
 
 // Physics — for client-side prediction only (mirrors host.js exactly)
 const ACCEL=900,FRICTION=0.88,MAX_SPD=580
-const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38,BOOST_REGEN=9
+const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38,BOOST_REGEN=0  // no auto-regen
 const DASH_SPEED=MAX_SPD*2.0,DASH_DUR=0.18,DASH_CD=1.2
 
 // ─── RENDER STATE ────────────────────────────────────────────────
@@ -440,8 +440,11 @@ function updateTrails(dt){
         const dashing=p.id===myId?(local.ready&&local.dashing):p.dashing
         if(boosting||dashing){
             p.trailPts.unshift({x:rx,y:ry,dash:dashing})
-            if(p.trailPts.length>22)p.trailPts.pop()
-        } else {if(p.trailPts.length)p.trailPts.pop()}
+            if(p.trailPts.length>45)p.trailPts.pop()   // longer trail
+        } else {
+            // Fade out gradually — pop 1 per frame so it lingers
+            if(p.trailPts.length)p.trailPts.pop()
+        }
     })
 }
 function drawTrails(){
@@ -453,17 +456,22 @@ function drawTrails(){
         ctx.save()
         p.trailPts.forEach((pt,i)=>{
             const t=1-i/p.trailPts.length
+            // Size = full CAR_R at head, tapers to 0 at tail
+            const sz=CAR_R*t
             if(imgSrc&&!isDash){
                 const img=imgCache[imgSrc]
                 if(img&&img.complete&&img.naturalWidth){
-                    const sz=CAR_R*1.4*t;ctx.globalAlpha=t*0.8
-                    ctx.drawImage(img,pt.x-sz/2,pt.y-sz/2,sz,sz);return
+                    ctx.globalAlpha=t*0.85
+                    ctx.drawImage(img,pt.x-sz,pt.y-sz,sz*2,sz*2);return
                 }
             }
-            ctx.globalAlpha=t*0.55;ctx.shadowColor=baseColor;ctx.shadowBlur=10
-            ctx.beginPath();ctx.arc(pt.x,pt.y,CAR_R*0.65*t,0,Math.PI*2)
+            // Default glow circle — same radius as car at head
+            ctx.globalAlpha=t*0.7
+            ctx.shadowColor=baseColor;ctx.shadowBlur=12
+            ctx.beginPath();ctx.arc(pt.x,pt.y,sz,0,Math.PI*2)
             ctx.fillStyle=baseColor;ctx.fill()
-        });ctx.restore()
+        })
+        ctx.restore()
     })
 }
 
