@@ -2,89 +2,72 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Champions Field</title>
-<link rel="stylesheet" href="style.css">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Barlow:wght@400;600;700&display=swap');
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-html,body{width:100%;height:100%;background:#050810;overflow:hidden;font-family:'Barlow',sans-serif;color:#fff;touch-action:none;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;font-family:sans-serif;}
 #gameWrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;}
 #game{display:block;max-width:100vw;max-height:100vh;}
-
-/* ── SCOREBOARD — fixed-width team blocks so names don't cause asymmetry ── */
-#scoreboard{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;pointer-events:none;user-select:none;z-index:20;font-family:'Barlow Condensed',sans-serif;}
-#sb-top{background:rgba(6,8,18,0.96);border:1px solid rgba(255,255,255,0.1);border-top:none;padding:4px 28px;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.55);white-space:nowrap;border-bottom:1px solid rgba(255,255,255,0.06);}
+#scoreboard{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;pointer-events:none;z-index:20;font-family:'Barlow Condensed',sans-serif;display:none;}
+#sb-top{background:rgba(6,8,18,0.96);border:1px solid rgba(255,255,255,0.1);border-top:none;padding:4px 28px;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.55);}
 #sb-series-title{color:#fff;}
-#sb-main{display:flex;align-items:stretch;background:rgba(6,8,18,0.96);border:1px solid rgba(255,255,255,0.1);border-top:none;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.7);}
-.sb-team-block{display:flex;align-items:center;width:160px;flex-shrink:0;overflow:hidden;}
+#sb-main{display:flex;align-items:stretch;background:rgba(6,8,18,0.96);border:1px solid rgba(255,255,255,0.1);border-top:none;overflow:hidden;}
+.sb-team-block{display:flex;align-items:center;width:160px;overflow:hidden;}
 .sb-bar{width:8px;height:100%;flex-shrink:0;}
-.sb-team-name{font-size:20px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#fff;padding:7px 10px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-/* Left: bar | name (right-aligned) */
-.sb-team-block.left{flex-direction:row;}
-.sb-team-block.left .sb-team-name{text-align:right;}
-/* Right: name (left-aligned) | bar  — symmetric mirror of left */
-.sb-team-block.right{flex-direction:row-reverse;}
-.sb-team-block.right .sb-team-name{text-align:left;}
+.sb-team-name{font-size:20px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:#fff;padding:7px 10px;flex:1;white-space:nowrap;overflow:hidden;}
+.sb-team-block.left{flex-direction:row;} .sb-team-block.left .sb-team-name{text-align:right;}
+.sb-team-block.right{flex-direction:row-reverse;} .sb-team-block.right .sb-team-name{text-align:left;}
 .sb-score{font-size:40px;font-weight:900;color:#fff;padding:4px 10px;width:46px;text-align:center;background:rgba(255,255,255,0.05);border-left:1px solid rgba(255,255,255,0.08);border-right:1px solid rgba(255,255,255,0.08);line-height:1;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-#sb-center{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 20px;border-left:1px solid rgba(255,255,255,0.08);border-right:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.02);min-width:96px;}
-#hud-timer{font-size:28px;font-weight:800;letter-spacing:2px;line-height:1;transition:color .3s,font-size .2s;}
-#sb-bottom{background:rgba(4,6,14,0.96);border:1px solid rgba(255,255,255,0.08);border-top:none;padding:3px 20px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.35);display:flex;gap:8px;align-items:center;justify-content:center;white-space:nowrap;}
-#sb-game-num,#sb-best-of{color:rgba(255,255,255,0.45);}
-.sb-pip{color:rgba(255,255,255,0.15);}
-
-/* ── PANELS ── */
+#sb-center{display:flex;align-items:center;justify-content:center;padding:5px 20px;border-left:1px solid rgba(255,255,255,0.08);border-right:1px solid rgba(255,255,255,0.08);min-width:96px;}
+#hud-timer{font-size:28px;font-weight:800;letter-spacing:2px;line-height:1;transition:color .3s;}
+#sb-bottom{background:rgba(4,6,14,0.96);border:1px solid rgba(255,255,255,0.08);border-top:none;padding:3px 20px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.35);display:flex;gap:8px;align-items:center;justify-content:center;}
+#sb-game-num,#sb-best-of{color:rgba(255,255,255,0.45);} .sb-pip{color:rgba(255,255,255,0.15);}
 #blueTeam,#orangeTeam{position:absolute;top:100px;width:210px;display:flex;flex-direction:column;gap:5px;pointer-events:none;z-index:10;}
 #blueTeam{left:6px;}#orangeTeam{right:6px;}
-
-/* ── BOOST ── */
-#boost-wrap{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none;z-index:10;}
+#boost-wrap{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none;z-index:10;display:none;}
 #boost-circle-container{position:relative;width:72px;height:72px;}
 #boost-canvas{position:absolute;inset:0;width:72px;height:72px;}
-#boost-circle-val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-size:26px;font-weight:900;color:#fff;}
-#boost-label{font-size:9px;letter-spacing:3px;opacity:.3;text-transform:uppercase;font-family:'Barlow',sans-serif;}
-
-/* ── KICKOFF / GOAL / GAMEOVER ── */
-#kickoff-countdown{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-family:'Barlow Condensed',sans-serif;font-size:120px;font-weight:900;color:#fff;text-shadow:0 0 40px rgba(255,255,255,0.4);pointer-events:none;display:none;z-index:30;animation:pulseCount .9s ease-in-out infinite;}
-@keyframes pulseCount{0%,100%{transform:translate(-50%,-50%) scale(1);}50%{transform:translate(-50%,-50%) scale(1.08);}}
+#boost-circle-val{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;}
+#kickoff-countdown{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:120px;font-weight:900;color:#fff;pointer-events:none;display:none;z-index:30;}
 #goalBanner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;opacity:0;transition:opacity .3s;z-index:25;}
 #goalBanner.show{opacity:1;}
-#goalWord{font-family:'Barlow Condensed',sans-serif;font-size:100px;font-weight:900;letter-spacing:14px;text-transform:uppercase;-webkit-text-stroke:2px rgba(255,255,255,0.15);}
-#goalSub{font-size:16px;letter-spacing:4px;opacity:.6;margin-top:8px;font-weight:600;text-transform:uppercase;text-align:center;max-width:600px;}
-#ctrlHint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:9px;letter-spacing:1.5px;opacity:.2;white-space:nowrap;text-transform:uppercase;margin-bottom:90px;color:#fff;z-index:5;}
-#ctrlHint span{color:#aaffaa;opacity:1;}
-
-/* ── CONNECTING SCREEN ── */
+#goalWord{font-size:100px;font-weight:900;letter-spacing:14px;text-transform:uppercase;}
+#goalSub{font-size:16px;letter-spacing:4px;opacity:.6;margin-top:8px;text-align:center;}
 #connecting{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#050810;z-index:50;gap:16px;}
-#connecting h2{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#00aaff;}
-#connecting p{font-size:13px;opacity:.5;letter-spacing:1px;}
+#connecting h2{font-size:28px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#00aaff;}
+#connecting p{font-size:13px;opacity:.5;}
 .spinner{width:40px;height:40px;border:3px solid rgba(0,170,255,0.2);border-top-color:#00aaff;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-
-/* ── PLAYER CARDS ── */
 .playerCard{display:flex;align-items:center;background:rgba(0,0,0,0.72);border-radius:4px;overflow:hidden;height:42px;width:200px;border:1px solid rgba(255,255,255,0.07);}
 .avatar-container{width:42px;height:42px;flex-shrink:0;background:#000;}
 .pfp{width:100%;height:100%;object-fit:cover;border-right:1px solid rgba(255,255,255,0.08);}
 .info-container{flex-grow:1;height:100%;display:flex;flex-direction:column;justify-content:center;padding-left:9px;position:relative;background-size:cover!important;background-position:center!important;}
-.info-container::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.88) 0%,rgba(0,0,0,.25) 65%,transparent 100%);z-index:1;}
+.info-container::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.88) 0%,transparent 100%);z-index:1;}
 .name{position:relative;z-index:2;font-weight:800;font-size:12px;color:#fff;text-transform:uppercase;}
-.playerTitle{position:relative;z-index:2;font-size:8px;font-weight:700;text-transform:uppercase;margin-top:1px;letter-spacing:1px;}
+/* ── MOBILE CONTROLS ── */
+#mc{position:absolute;bottom:0;left:0;right:0;height:190px;pointer-events:none;z-index:40;display:none;}
+#mc.show{display:block;}
+#joystick{position:absolute;left:24px;bottom:20px;width:150px;height:150px;pointer-events:all;touch-action:none;}
+#jBase{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,0.07);border:2px solid rgba(255,255,255,0.18);}
+#jKnob{position:absolute;width:58px;height:58px;border-radius:50%;background:rgba(255,255,255,0.28);border:2px solid rgba(255,255,255,0.5);left:46px;top:46px;}
+#mcBtns{position:absolute;right:20px;bottom:20px;display:flex;flex-direction:column;gap:12px;pointer-events:all;}
+.mcBtn{width:70px;height:70px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;letter-spacing:2px;color:#fff;border:2px solid;touch-action:none;user-select:none;-webkit-user-select:none;}
+#mcBoost{background:rgba(255,180,0,0.2);border-color:#ffd700;color:#ffd700;}
+#mcBoost.on{background:rgba(255,180,0,0.5);}
+#mcDash{background:rgba(180,80,255,0.2);border-color:#cc88ff;color:#cc88ff;}
+#mcDash.on{background:rgba(180,80,255,0.5);}
 
-/* ── MOBILE CONTROLS — shown via JS on real touch devices only ── */
-</style>
 </head>
 <body>
 <div id="gameWrap">
   <canvas id="game" width="1600" height="820"></canvas>
-
   <div id="connecting">
     <div class="spinner"></div>
     <h2 id="connecting-title">CONECTANDO</h2>
     <p id="connecting-msg">Uniéndose al servidor...</p>
   </div>
-
-  <div id="scoreboard" style="display:none">
-    <div id="sb-top"><span id="sb-series-title">FRIENDLY MATCH</span></div>
+  <div id="scoreboard">
+    <div id="sb-top"><span id="sb-series-title">CHAMPIONS FIELD</span></div>
     <div id="sb-main">
       <div class="sb-team-block left">
         <div class="sb-bar" id="sb-blue-block" style="background:#00aaff"></div>
@@ -98,49 +81,43 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;font-family:
         <div class="sb-bar" id="sb-orange-block" style="background:#ff6600"></div>
       </div>
     </div>
-    <div id="sb-bottom">
-      <span id="sb-game-num">GAME 1</span><span class="sb-pip">|</span><span id="sb-best-of">BEST OF 7</span>
-    </div>
+    <div id="sb-bottom"><span id="sb-game-num">GAME 1</span><span class="sb-pip">|</span><span id="sb-best-of">BEST OF 7</span></div>
   </div>
-
   <div id="blueTeam"></div>
   <div id="orangeTeam"></div>
-
-  <div id="boost-wrap" style="display:none">
+  <div id="boost-wrap">
     <div id="boost-circle-container">
       <canvas id="boost-canvas" width="72" height="72"></canvas>
       <div id="boost-circle-val">33</div>
     </div>
-    <div id="boost-label">Boost</div>
   </div>
-
   <div id="kickoff-countdown">3</div>
-
   <div id="goalBanner">
     <div id="goalWord">¡GOL!</div>
     <div id="goalSub">INCREÍBLE</div>
   </div>
 
-  <div id="ctrlHint">
-    <span>WASD</span> mover · <span>Shift</span> boost · <span>Espacio</span> dash
+  <!-- Mobile controls -->
+  <div id="mc">
+    <div id="joystick">
+      <div id="jBase"></div>
+      <div id="jKnob"></div>
+    </div>
+    <div id="mcBtns">
+      <div class="mcBtn" id="mcBoost">BOOST</div>
+      <div class="mcBtn" id="mcDash">DASH</div>
+    </div>
   </div>
-
-
-
 </div>
-
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="game.js"></script>
 <script>
-// ═══════════════════════════════════════════════════════════════
-//  CHAMPIONS FIELD — Game Bootstrap
-// ═══════════════════════════════════════════════════════════════
 (function(){
-    const params   = new URLSearchParams(window.location.search)
-    const roomCode = params.get("room")
-    const freePlay = params.get("free") === "1"
-    const pd       = JSON.parse(localStorage.getItem("playerData")||"{}")
+    var params   = new URLSearchParams(window.location.search)
+    var roomCode = params.get("room")
+    var freePlay = params.get("free") === "1"
+    var pd       = JSON.parse(localStorage.getItem("playerData")||"{}")
 
     function showMsg(m){ document.getElementById("connecting-msg").textContent=m }
     function hideOverlay(){
@@ -149,182 +126,177 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;font-family:
         document.getElementById("boost-wrap").style.display="flex"
     }
 
-    // ══ SOUNDS ════════════════════════════════════════════════
-    const SFX={}
-    const sfxFiles={select:1,boost:2,dash:3,goal:4,countdown:5,lowtime:6,crowd:7}
-    Object.entries(sfxFiles).forEach(([name,n])=>{
-        const a=new Audio(`assets/effects/effect${n}.mp3`)
-        a.preload="auto"
-        if(name==="crowd"){ a.loop=true; a.volume=0 }
-        SFX[name]=a
-    })
-    let crowdPlaying=false
-    function playSound(name,vol=0.7){
-        const s=SFX[name]; if(!s)return
-        try{ s.currentTime=0; s.volume=vol; s.play().catch(()=>{}) }catch{}
-    }
-    function updateCrowd(ballX){
-        // Volume based on how close ball is to either goal
-        const distToGoal=Math.min(Math.abs(ballX-GOAL_L.x),Math.abs(ballX-GOAL_R.x))
-        const maxDist=W*0.4
-        const vol=Math.max(0,1-distToGoal/maxDist)*0.6
-        if(vol>0.05&&!crowdPlaying){
-            try{SFX.crowd.play().catch(()=>{}); crowdPlaying=true}catch{}
-        }
-        if(SFX.crowd) SFX.crowd.volume=vol
-    }
-    // Expose for game.js
-    window._sfx = { play:playSound, updateCrowd }
-
-    
-    // ══ FREE PLAY ═════════════════════════════════════════════
+    // ── FREE PLAY ───────────────────────────────────────────────
     if(freePlay){
-        myId="local_player"; isHost=true
-        const FP={
-            players:[{id:"local_player",team:pd.team||"blue",name:pd.name||"Jugador",
-                title:pd.title||"",titleColor:pd.titleColor||"#aaa",
-                pfp:pd.pfp||"assets/default_pfp.png",banner:pd.banner||"assets/banners/Default.png",
-                decal:pd.decal||null,boostTrail:pd.boostTrail||null,
-                x:W/2,y:H/2,vx:0,vy:0,boost:33,dashing:false,dashTimer:0,dashCd:0,dashVx:0,dashVy:0}],
-            ball:{x:W/2,y:H/2+100,vx:0,vy:0,spin:0},
-            pads:PADS_POS.map(p=>({...p,active:true,timer:0})),
-            phase:"playing",kickoffTimer:0,
-            settings:{blueTeamName:"FREE PLAY",orangeTeamName:"",blueColor:"#ffffff",orangeColor:"#ffffff",seriesTitle:"FREE PLAY",gameNum:1,bestOf:1}
-        }
-        settings=FP.settings; ensurePlayer("local_player",FP.players[0])
-        local.x=W/2;local.y=H/2;local.ready=true; hideOverlay()
-        const b=FP.ball; let fpLast=0
-        function fpTick(ts){
-            const dt=Math.min((ts-fpLast)/1000,0.05);fpLast=ts
+        myId="local_player"
+        ensurePlayer("local_player",{id:"local_player",team:pd.team||"blue",name:pd.name||"Jugador",title:pd.title||"",titleColor:pd.titleColor||"#aaa",pfp:pd.pfp||"",banner:pd.banner||"assets/banners/Default.png",decal:pd.decal||null,boostTrail:pd.boostTrail||null})
+        settings={blueTeamName:"FREE PLAY",orangeTeamName:"",blueColor:"#ffffff",orangeColor:"#ffffff",seriesTitle:"FREE PLAY",gameNum:1,bestOf:1}
+        local.x=W/2;local.y=H/2;local.ready=true
+        gamePhase="playing"; matchTime=Infinity
+        hideOverlay()
+        var b={x:W/2,y:H/2+100,vx:0,vy:0,spin:0},fpLast=0
+        ;(function fpTick(ts){
+            var dt=Math.min((ts-fpLast)/1000,0.05);fpLast=ts
             b.vx*=Math.pow(0.9985,dt*60);b.vy*=Math.pow(0.9985,dt*60)
             b.x+=b.vx*dt;b.y+=b.vy*dt
             if(b.x-24<WALL_L){b.x=WALL_L+24;b.vx=Math.abs(b.vx)*0.72}
             if(b.x+24>WALL_R){b.x=WALL_R-24;b.vx=-Math.abs(b.vx)*0.72}
             if(b.y-24<WALL_T){b.y=WALL_T+24;b.vy=Math.abs(b.vy)*0.72}
             if(b.y+24>WALL_B){b.y=WALL_B-24;b.vy=-Math.abs(b.vy)*0.72}
-            const p=FP.players[0];p.x=local.x;p.y=local.y;p.vx=local.vx;p.vy=local.vy
-            const dx=b.x-p.x,dy=b.y-p.y,dist=Math.hypot(dx,dy),minD=46
+            var px=local.x,py=local.y,pvx=local.vx,pvy=local.vy
+            var dx=b.x-px,dy=b.y-py,dist=Math.hypot(dx,dy),minD=46
             if(dist<minD&&dist>0.01){
-                const nx=dx/dist,ny=dy/dist
+                var nx=dx/dist,ny=dy/dist
                 b.x+=nx*(minD-dist);b.y+=ny*(minD-dist)*0.5
-                const rvx=b.vx-p.vx,rvy=b.vy-p.vy,relV=rvx*nx+rvy*ny
-                if(relV<0){const imp=Math.max(200,-(1.4)*relV+Math.min(Math.hypot(p.vx,p.vy),640)*0.6);b.vx+=nx*imp;b.vy+=ny*imp}
+                var relV=(b.vx-pvx)*nx+(b.vy-pvy)*ny
+                if(relV<0){var imp=Math.max(200,-(1.4)*relV+Math.min(Math.hypot(pvx,pvy),640)*0.6);b.vx+=nx*imp;b.vy+=ny*imp}
             }
-            FP.pads.forEach(pad=>{
-                if(pad.active&&Math.hypot(p.x-pad.x,p.y-pad.y)<40){local.boost=Math.min(100,local.boost+pad.value);pad.active=false;pad.timer=pad.type==="big"?600:240}
-                if(!pad.active){pad.timer-=dt*60;if(pad.timer<=0)pad.active=true}
-            })
-            ball={x:Math.round(b.x),y:Math.round(b.y),spin:+b.spin.toFixed(2)}
-            FP.pads.forEach((fp,i)=>boostPads[i]&&(boostPads[i].active=fp.active))
-            gamePhase="playing"; matchTime=Infinity
-            window._sfx&&window._sfx.updateCrowd(b.x)
-            const me=playerMap[myId]; if(me){
-                const bv=Math.round(local.boost)
-                const el=document.getElementById("boost-circle-val"); if(el)el.textContent=bv
-                drawBoostCircle(bv,"#ffffff")
-            }
+            ball={x:Math.round(b.x),y:Math.round(b.y),spin:0}
             requestAnimationFrame(fpTick)
-        }
-        requestAnimationFrame(fpTick)
+        })(0)
         return
     }
 
-    // ══ MULTIPLAYER ═══════════════════════════════════════════
+    // ── MULTIPLAYER ─────────────────────────────────────────────
     if(!roomCode){showMsg("Sin sala. Vuelve al menú.");return}
-    const socket=io()
-    let prevBoost=false, prevDash=false, countdownPlayed=new Set()
 
-    socket.on("connect",()=>{
+    var socket=io()
+
+    socket.on("connect",function(){
         myId=socket.id
-        socket.emit("joinLobby",{room:roomCode,...pd})
-        showMsg("Uniéndose a la sala...")
+        socket.emit("joinLobby",{room:roomCode,name:pd.name||"Jugador",team:pd.team||"blue",title:pd.title||"ROOKIE",titleColor:pd.titleColor||"#aaa",pfp:pd.pfp||"",banner:pd.banner||"assets/banners/Default.png",decal:pd.decal||null,boostTrail:pd.boostTrail||null})
+        showMsg("Conectado — uniéndose a la sala...")
     })
 
-    socket.on("lobbyJoined",({myId:id,players,settings:s,phase})=>{
-        myId=id
-        players.forEach(p=>{const lp=ensurePlayer(p.id,p);Object.assign(lp,p)})
-        if(s)settings=s; updateSidePanels(players); hideOverlay()
-    })
-    socket.on("lobbyUpdate",({players,settings:s})=>{
-        players.forEach(p=>{const lp=ensurePlayer(p.id,p);Object.assign(lp,p)})
-        if(s)settings=s; updateSidePanels(players)
-    })
-    socket.on("gameStarted",({players,settings:s})=>{
-        players.forEach(p=>{const lp=ensurePlayer(p.id,p);Object.assign(lp,p)})
-        if(s)settings=s; updateSidePanels(players); hideOverlay()
+    socket.on("lobbyJoined",function(data){
+        myId=data.myId
+        data.players.forEach(function(p){var lp=ensurePlayer(p.id,p);Object.assign(lp,p)})
+        if(data.settings)settings=data.settings
+        updateSidePanels(data.players)
+        hideOverlay()
     })
 
-    socket.on("state",data=>{
-        const srv=data.players.find(p=>p.id===myId)
+    socket.on("lobbyUpdate",function(data){
+        data.players.forEach(function(p){var lp=ensurePlayer(p.id,p);Object.assign(lp,p)})
+        if(data.settings)settings=data.settings
+        updateSidePanels(data.players)
+    })
+
+    socket.on("gameStarted",function(data){
+        data.players.forEach(function(p){var lp=ensurePlayer(p.id,p);Object.assign(lp,p)})
+        if(data.settings)settings=data.settings
+        updateSidePanels(data.players)
+        hideOverlay()
+    })
+    socket.on("state",function(data){
+        var srv=data.players.find(function(p){return p.id===myId})
         if(srv) reconcile(srv)
-        data.players.forEach(sp=>{
-            const p=ensurePlayer(sp.id,{team:sp.team})
+        data.players.forEach(function(sp){
+            var p=ensurePlayer(sp.id,{team:sp.team})
             p.x=sp.x;p.y=sp.y;p.vx=sp.vx||0;p.vy=sp.vy||0
             p.boost=sp.boost;p.dashing=sp.dashing;p.isBoosting=sp.isBoosting;p.dashCd=sp.dashCd||0
         })
-        const live=new Set(data.players.map(p=>p.id))
-        Object.keys(playerMap).forEach(id=>{if(!live.has(id))delete playerMap[id]})
+        var live=new Set(data.players.map(function(p){return p.id}))
+        Object.keys(playerMap).forEach(function(id){if(!live.has(id))delete playerMap[id]})
         ball=data.ball; scores=data.scores; matchTime=data.matchTime
         gamePhase=data.phase||"playing"; kickoffTimer=data.kickoffTimer||0
         if(data.settings)settings=data.settings
-        if(data.pads)data.pads.forEach((sp,i)=>boostPads[i]&&(boostPads[i].active=sp.active))
+        if(data.pads)data.pads.forEach(function(sp,i){if(boostPads[i])boostPads[i].active=sp.active})
         updateHUD()
-        window._sfx&&window._sfx.updateCrowd(ball.x)
-        // 10-second countdown sound
-        if(matchTime<=10&&matchTime>0&&!countdownPlayed.has(Math.ceil(matchTime))){
-            countdownPlayed.add(Math.ceil(matchTime)); playSound("lowtime",0.6)
-        }
-        // Boost sound
-        const me=playerMap[myId]; if(me){
-            const boosting=local.ready&&getInput().shift&&local.boost>0
-            if(boosting&&!prevBoost) playSound("boost",0.4)
-            prevBoost=boosting
-        }
     })
 
-    socket.on("goal",({scorer,scores:sc,settings:s})=>{
-        if(s)settings=s; scores=sc; local.ready=false; dimAlpha=1
-        showGoalBanner(scorer); spawnGoalExplosion(scorer); updateHUD()
+    socket.on("goal",function(data){
+        if(data.settings)settings=data.settings
+        scores=data.scores; local.ready=false; dimAlpha=1
+        showGoalBanner(data.scorer); spawnGoalExplosion(data.scorer); updateHUD()
         document.getElementById("goalBanner").classList.add("show")
-        playSound("goal",0.8)
     })
-    socket.on("kickoff",({scores:sc,settings:s})=>{
-        if(s)settings=s; scores=sc; dimAlpha=0; countdownPlayed.clear()
+    socket.on("kickoff",function(data){
+        if(data.settings)settings=data.settings
+        scores=data.scores; dimAlpha=0
         document.getElementById("goalBanner").classList.remove("show"); updateHUD()
     })
-    socket.on("gameOver",sc=>{scores=sc; showGameOver(sc)})
-    socket.on("disconnect",()=>{
-        document.getElementById("goalWord").textContent="DESCONECTADO"
-        document.getElementById("goalWord").style.color="#ff4444"
-        document.getElementById("goalSub").textContent="Reconectando..."
-        document.getElementById("goalBanner").classList.add("show")
-    })
+    socket.on("gameOver",function(sc){scores=sc; showGameOver(sc)})
 
-    // Kickoff countdown sound
-    const origUpdateHUD=updateHUD
-    updateHUD=function(){
-        origUpdateHUD()
-        if(gamePhase==="kickoffCountdown"&&kickoffTimer>0){
-            const k=Math.ceil(kickoffTimer)
-            if(!countdownPlayed.has("k"+k)){countdownPlayed.add("k"+k);playSound("countdown",0.7)}
-        }
-    }
-
-    // Dash sound is triggered by checking local.dashing state change in setInterval below
-
-    let seq=0, _prevDashLocal=false
-    const inputBuf=[]
-    setInterval(()=>{
-        const inp=getInput(); seq++
-        inputBuf.push({seq,inp,dt:1/60})
+    // Input loop
+    var seq=0
+    var inputBuf=[]
+    setInterval(function(){
+        var inp=getInput(); seq++
+        inputBuf.push({seq:seq,inp:inp,dt:1/60})
         if(inputBuf.length>120)inputBuf.shift()
-        socket.emit("input",{seq,input:inp})
-        // Dash sound via local state
-        if(local.dashing&&!_prevDashLocal) playSound("dash",0.5)
-        _prevDashLocal=local.dashing
+        socket.emit("input",{seq:seq,input:inp})
     },1000/60)
     window._inputBuf=inputBuf
 
+    // ── MOBILE CONTROLS ─────────────────────────────────────────
+    // Only activate on real touch devices
+    if(window.matchMedia('(pointer:coarse)').matches){
+        document.getElementById('mc').classList.add('show')
+        // Move boost wrap up so joystick doesn't cover it
+        var bw=document.getElementById('boost-wrap')
+        if(bw) bw.style.bottom='200px'
+    }
+
+    var joystick=document.getElementById('joystick')
+    var jKnob=document.getElementById('jKnob')
+    var mcBoost=document.getElementById('mcBoost')
+    var mcDash=document.getElementById('mcDash')
+    var JR=75, KR=29  // zone radius, knob radius
+
+    if(joystick && jKnob){
+        var jActive=false, jTouchId=null
+        joystick.addEventListener('touchstart',function(e){
+            e.preventDefault()
+            var t=e.changedTouches[0]
+            jTouchId=t.identifier; jActive=true
+            moveJoystick(t)
+        },{passive:false})
+        joystick.addEventListener('touchmove',function(e){
+            e.preventDefault()
+            for(var i=0;i<e.changedTouches.length;i++){
+                if(e.changedTouches[i].identifier===jTouchId) moveJoystick(e.changedTouches[i])
+            }
+        },{passive:false})
+        joystick.addEventListener('touchend',function(e){
+            e.preventDefault()
+            jActive=false; jTouchId=null
+            jKnob.style.left=(JR-KR)+'px'; jKnob.style.top=(JR-KR)+'px'
+            mobileInput.w=mobileInput.a=mobileInput.s=mobileInput.d=false
+        },{passive:false})
+
+        function moveJoystick(t){
+            var rect=joystick.getBoundingClientRect()
+            var cx=rect.left+rect.width/2, cy=rect.top+rect.height/2
+            var dx=t.clientX-cx, dy=t.clientY-cy
+            var dist=Math.hypot(dx,dy)
+            if(dist>JR){dx=dx/dist*JR; dy=dy/dist*JR}
+            jKnob.style.left=(JR-KR+dx)+'px'
+            jKnob.style.top =(JR-KR+dy)+'px'
+            var mx=dx/JR, my=dy/JR
+            mobileInput.w=my<-0.3; mobileInput.s=my>0.3
+            mobileInput.a=mx<-0.3; mobileInput.d=mx>0.3
+        }
+    }
+
+    if(mcBoost){
+        mcBoost.addEventListener('touchstart',function(e){
+            e.preventDefault(); mobileInput.shift=true; mcBoost.classList.add('on')
+        },{passive:false})
+        mcBoost.addEventListener('touchend',function(e){
+            e.preventDefault(); mobileInput.shift=false; mcBoost.classList.remove('on')
+        },{passive:false})
+    }
+    if(mcDash){
+        mcDash.addEventListener('touchstart',function(e){
+            e.preventDefault(); mobileInput.dash=true; mcDash.classList.add('on')
+        },{passive:false})
+        mcDash.addEventListener('touchend',function(e){
+            e.preventDefault(); mobileInput.dash=false; mcDash.classList.remove('on')
+            // dash is one-shot — clear after 1 frame
+            setTimeout(function(){mobileInput.dash=false},50)
+        },{passive:false})
+    }
 
 })()
 </script>

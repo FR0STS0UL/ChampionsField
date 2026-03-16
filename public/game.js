@@ -195,8 +195,18 @@ document.addEventListener("keyup",e=>{
     const k=e.key==="Shift"?"shift":e.code==="Space"?"dash":e.key.toLowerCase()
     keys[k]=false
 })
+// Mobile input — set by game.html touch handlers, read by getInput()
+var mobileInput={w:false,a:false,s:false,d:false,shift:false,dash:false}
+
 function getInput(){
-    return{w:!!keys.w,a:!!keys.a,s:!!keys.s,d:!!keys.d,shift:!!keys.shift,dash:!!keys.dash}
+    return{
+        w:    !!keys.w    || mobileInput.w,
+        a:    !!keys.a    || mobileInput.a,
+        s:    !!keys.s    || mobileInput.s,
+        d:    !!keys.d    || mobileInput.d,
+        shift:!!keys.shift|| mobileInput.shift,
+        dash: !!keys.dash || mobileInput.dash
+    }
 }
 
 // Input loop is handled by game.html bootstrap (socket.emit "input")
@@ -449,10 +459,9 @@ function drawCar(p,x,y,vx,vy,dashing,isBoosting){
     }
     const grad=ctx.createRadialGradient(-r*.3,-r*.3,0,0,0,r)
     if(decalSrc){
-        // With decal: very thin overlay so decal shows through clearly
         grad.addColorStop(0,"rgba(255,255,255,0.05)")
         grad.addColorStop(0.5,"rgba(0,0,0,0)")
-        grad.addColorStop(1,shadeColor(teamColor,-60)+"44")
+        grad.addColorStop(1,"rgba(0,0,0,0.3)")
     } else {
         grad.addColorStop(0,"rgba(255,255,255,0.22)")
         grad.addColorStop(0.5,teamColor)
