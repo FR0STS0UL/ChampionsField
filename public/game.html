@@ -38,12 +38,13 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
 #connecting p{font-size:13px;opacity:.5;}
 .spinner{width:40px;height:40px;border:3px solid rgba(0,170,255,0.2);border-top-color:#00aaff;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-.playerCard{display:flex;align-items:center;background:rgba(0,0,0,0.72);border-radius:4px;overflow:hidden;height:42px;width:200px;border:1px solid rgba(255,255,255,0.07);}
-.avatar-container{width:42px;height:42px;flex-shrink:0;background:#000;}
+.playerCard{display:flex;align-items:center;background:rgba(0,0,0,0.72);border-radius:4px;overflow:hidden;height:70px;width:230px;border:1px solid rgba(255,255,255,0.07);}
+.avatar-container{width:70px;height:70px;flex-shrink:0;background:#000;}
 .pfp{width:100%;height:100%;object-fit:cover;border-right:1px solid rgba(255,255,255,0.08);}
-.info-container{flex-grow:1;height:100%;display:flex;flex-direction:column;justify-content:center;padding-left:9px;position:relative;background-size:cover!important;background-position:center!important;}
-.info-container::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.88) 0%,transparent 100%);z-index:1;}
-.name{position:relative;z-index:2;font-weight:800;font-size:12px;color:#fff;text-transform:uppercase;}
+.info-container{flex-grow:1;height:100%;display:flex;flex-direction:column;justify-content:center;padding-left:12px;position:relative;background-size:cover!important;background-position:center!important;}
+.info-container::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.88) 0%,rgba(0,0,0,.3) 60%,transparent 100%);z-index:1;}
+.name{position:relative;z-index:2;font-weight:800;font-size:14px;color:#fff;text-transform:uppercase;}
+.playerTitle{position:relative;z-index:2;font-size:10px;font-weight:800;text-transform:uppercase;margin-top:3px;letter-spacing:2px;filter:brightness(1.4);text-shadow:0 0 8px currentColor,0 0 20px currentColor;}
 /* ── MOBILE CONTROLS ── */
 #mc{position:absolute;bottom:0;left:0;right:0;height:190px;pointer-events:none;z-index:40;display:none;}
 #mc.show{display:block;}

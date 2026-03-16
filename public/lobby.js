@@ -117,13 +117,14 @@ function renderTeam(divId,players){
     players.forEach(p=>{
         const card=document.createElement("div"); card.className="playerCard"
         const isMe = p.id===myId
+        const tc = p.titleColor||'#aaa'
         card.innerHTML=`
             <div class="avatar-container">
                 <img src="${p.pfp||'assets/default_pfp.png'}" class="pfp" onerror="this.src='assets/default_pfp.png'">
             </div>
             <div class="info-container" style="background-image:url('${p.banner||'assets/banners/Default.png'}')">
                 <div class="name">${p.name||"Jugador"}${isMe?' <span style="color:#ffd700;font-size:9px">TÚ</span>':''}</div>
-                <div class="playerTitle" style="color:${p.titleColor||'#aaa'}">${p.title||""}</div>
+                <div class="playerTitle" style="color:${tc};text-shadow:0 0 8px ${tc},0 0 20px ${tc}">${p.title||""}</div>
             </div>`
         div.appendChild(card)
     })

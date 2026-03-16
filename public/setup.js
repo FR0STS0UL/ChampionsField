@@ -1,7 +1,7 @@
 // No socket needed in the menu — room is created on first joinLobby
 
 const SPECIAL_TITLES = {
-    "Frost":  { title:"DEVELOPER",   color:"#ff2222" },
+    "Frost":  { title:"DEVELOPER",   color:"#ff1111" },
     "Matias": { title:"GOAT",         color:"#00ff66" },
     "Tester": { title:"BETA TESTER",  color:"#55ffff" },
 }

@@ -284,10 +284,11 @@ function updateSidePanels(pList){
     pList.forEach(p=>{
         const card=document.createElement("div");card.className="playerCard"
         const banner=p.banner||"assets/banners/Default.png"
+        const tc=p.titleColor||"#aaa"
         card.innerHTML=`<div class="avatar-container"><img src="${p.pfp||'assets/default_pfp.png'}" class="pfp" onerror="this.src='assets/default_pfp.png'"></div>
             <div class="info-container" style="background-image:url('${banner}')">
                 <div class="name">${p.name||"Jugador"}</div>
-                <div class="playerTitle" style="color:${p.titleColor||'#aaa'}">${p.title||""}</div>
+                <div class="playerTitle" style="color:${tc};text-shadow:0 0 8px ${tc},0 0 20px ${tc}">${p.title||""}</div>
             </div>`
         ;(p.team==="blue"?bd:od).appendChild(card)
     })
