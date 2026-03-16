@@ -53,7 +53,8 @@ socket.on("roomError", msg=>{
 })
 
 socket.on("gameStarted", ()=>{
-    window.location.href=`game.html?room=${room}`
+    socket.disconnect()
+    setTimeout(()=>{ window.location.href=`game.html?room=${room}` }, 200)
 })
 
 function joinTeam(team){

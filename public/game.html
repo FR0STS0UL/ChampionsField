@@ -56,7 +56,7 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
 #mcBoost.on{background:rgba(255,180,0,0.5);}
 #mcDash{background:rgba(180,80,255,0.2);border-color:#cc88ff;color:#cc88ff;}
 #mcDash.on{background:rgba(180,80,255,0.5);}
-
+</style>
 </head>
 <body>
 <div id="gameWrap">
@@ -120,11 +120,16 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
     var pd       = JSON.parse(localStorage.getItem("playerData")||"{}")
 
     function showMsg(m){ document.getElementById("connecting-msg").textContent=m }
+    var _overlayHidden=false
     function hideOverlay(){
+        if(_overlayHidden)return
+        _overlayHidden=true
         document.getElementById("connecting").style.display="none"
         document.getElementById("scoreboard").style.display="flex"
         document.getElementById("boost-wrap").style.display="flex"
     }
+    // Guaranteed fallback — hide overlay after 3s no matter what
+    setTimeout(hideOverlay, 3000)
 
     // ── FREE PLAY ───────────────────────────────────────────────
     if(freePlay){
@@ -188,7 +193,9 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
         updateSidePanels(data.players)
         hideOverlay()
     })
+    var _stateHidden=false
     socket.on("state",function(data){
+        if(!_stateHidden){_stateHidden=true; hideOverlay()}
         var srv=data.players.find(function(p){return p.id===myId})
         if(srv) reconcile(srv)
         data.players.forEach(function(sp){
