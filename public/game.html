@@ -2,12 +2,14 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Champions Field</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;font-family:sans-serif;}
 #gameWrap{position:relative;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;}
-#game{display:block;max-width:100vw;max-height:100vh;}
+#game{display:block;max-width:calc(100vw - 500px);max-height:calc(100vh - 60px);}
+@media(max-width:900px){#game{max-width:100vw;max-height:calc(100vh - 200px);}}
 #scoreboard{position:absolute;top:0;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;pointer-events:none;z-index:20;font-family:'Barlow Condensed',sans-serif;display:none;}
 #sb-top{background:rgba(6,8,18,0.96);border:1px solid rgba(255,255,255,0.1);border-top:none;padding:4px 28px;font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.55);}
 #sb-series-title{color:#fff;}
@@ -22,8 +24,9 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
 #hud-timer{font-size:28px;font-weight:800;letter-spacing:2px;line-height:1;transition:color .3s;}
 #sb-bottom{background:rgba(4,6,14,0.96);border:1px solid rgba(255,255,255,0.08);border-top:none;padding:3px 20px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.35);display:flex;gap:8px;align-items:center;justify-content:center;}
 #sb-game-num,#sb-best-of{color:rgba(255,255,255,0.45);} .sb-pip{color:rgba(255,255,255,0.15);}
-#blueTeam,#orangeTeam{position:absolute;top:100px;width:210px;display:flex;flex-direction:column;gap:5px;pointer-events:none;z-index:10;}
-#blueTeam{left:6px;}#orangeTeam{right:6px;}
+#blueTeam,#orangeTeam{position:absolute;top:70px;width:240px;display:flex;flex-direction:column;gap:6px;pointer-events:none;z-index:10;}
+#blueTeam{left:0;}#orangeTeam{right:0;}
+@media(max-width:900px){#blueTeam,#orangeTeam{display:none;}}
 #boost-wrap{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;pointer-events:none;z-index:10;display:none;}
 #boost-circle-container{position:relative;width:72px;height:72px;}
 #boost-canvas{position:absolute;inset:0;width:72px;height:72px;}
@@ -38,8 +41,8 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
 #connecting p{font-size:13px;opacity:.5;}
 .spinner{width:40px;height:40px;border:3px solid rgba(0,170,255,0.2);border-top-color:#00aaff;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-.playerCard{display:flex;align-items:center;background:rgba(0,0,0,0.72);border-radius:4px;overflow:hidden;height:70px;width:230px;border:1px solid rgba(255,255,255,0.07);}
-.avatar-container{width:70px;height:70px;flex-shrink:0;background:#000;}
+.playerCard{display:flex;align-items:center;background:rgba(0,0,0,0.72);border-radius:4px;overflow:hidden;height:80px;width:240px;border:1px solid rgba(255,255,255,0.07);}
+.avatar-container{width:80px;height:80px;flex-shrink:0;background:#000;}
 .pfp{width:100%;height:100%;object-fit:cover;border-right:1px solid rgba(255,255,255,0.08);}
 .info-container{flex-grow:1;height:100%;display:flex;flex-direction:column;justify-content:center;padding-left:12px;position:relative;background-size:cover!important;background-position:center!important;}
 .info-container::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.88) 0%,rgba(0,0,0,.3) 60%,transparent 100%);z-index:1;}
@@ -131,6 +134,76 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
     }
     // Guaranteed fallback — hide overlay after 3s no matter what
     setTimeout(hideOverlay, 3000)
+
+    // ── MOBILE CONTROLS ─────────────────────────────────────────
+    // Only activate on real touch devices
+    if(window.matchMedia('(pointer:coarse)').matches){
+        document.getElementById('mc').classList.add('show')
+        // Move boost wrap up so joystick doesn't cover it
+        var bw=document.getElementById('boost-wrap')
+        if(bw) bw.style.bottom='200px'
+    }
+
+    var joystick=document.getElementById('joystick')
+    var jKnob=document.getElementById('jKnob')
+    var mcBoost=document.getElementById('mcBoost')
+    var mcDash=document.getElementById('mcDash')
+    var JR=75, KR=29  // zone radius, knob radius
+
+    if(joystick && jKnob){
+        var jActive=false, jTouchId=null
+        joystick.addEventListener('touchstart',function(e){
+            e.preventDefault()
+            var t=e.changedTouches[0]
+            jTouchId=t.identifier; jActive=true
+            moveJoystick(t)
+        },{passive:false})
+        joystick.addEventListener('touchmove',function(e){
+            e.preventDefault()
+            for(var i=0;i<e.changedTouches.length;i++){
+                if(e.changedTouches[i].identifier===jTouchId) moveJoystick(e.changedTouches[i])
+            }
+        },{passive:false})
+        joystick.addEventListener('touchend',function(e){
+            e.preventDefault()
+            jActive=false; jTouchId=null
+            jKnob.style.left=(JR-KR)+'px'; jKnob.style.top=(JR-KR)+'px'
+            mobileInput.w=mobileInput.a=mobileInput.s=mobileInput.d=false
+        },{passive:false})
+
+        function moveJoystick(t){
+            var rect=joystick.getBoundingClientRect()
+            var cx=rect.left+rect.width/2, cy=rect.top+rect.height/2
+            var dx=t.clientX-cx, dy=t.clientY-cy
+            var dist=Math.hypot(dx,dy)
+            if(dist>JR){dx=dx/dist*JR; dy=dy/dist*JR}
+            jKnob.style.left=(JR-KR+dx)+'px'
+            jKnob.style.top =(JR-KR+dy)+'px'
+            var mx=dx/JR, my=dy/JR
+            mobileInput.w=my<-0.3; mobileInput.s=my>0.3
+            mobileInput.a=mx<-0.3; mobileInput.d=mx>0.3
+        }
+    }
+
+    if(mcBoost){
+        mcBoost.addEventListener('touchstart',function(e){
+            e.preventDefault(); mobileInput.shift=true; mcBoost.classList.add('on')
+        },{passive:false})
+        mcBoost.addEventListener('touchend',function(e){
+            e.preventDefault(); mobileInput.shift=false; mcBoost.classList.remove('on')
+        },{passive:false})
+    }
+    if(mcDash){
+        mcDash.addEventListener('touchstart',function(e){
+            e.preventDefault(); mobileInput.dash=true; mcDash.classList.add('on')
+        },{passive:false})
+        mcDash.addEventListener('touchend',function(e){
+            e.preventDefault(); mobileInput.dash=false; mcDash.classList.remove('on')
+            // dash is one-shot — clear after 1 frame
+            setTimeout(function(){mobileInput.dash=false},50)
+        },{passive:false})
+    }
+
 
     // ── FREE PLAY ───────────────────────────────────────────────
     if(freePlay){
@@ -236,75 +309,6 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
         socket.emit("input",{seq:seq,input:inp})
     },1000/60)
     window._inputBuf=inputBuf
-
-    // ── MOBILE CONTROLS ─────────────────────────────────────────
-    // Only activate on real touch devices
-    if(window.matchMedia('(pointer:coarse)').matches){
-        document.getElementById('mc').classList.add('show')
-        // Move boost wrap up so joystick doesn't cover it
-        var bw=document.getElementById('boost-wrap')
-        if(bw) bw.style.bottom='200px'
-    }
-
-    var joystick=document.getElementById('joystick')
-    var jKnob=document.getElementById('jKnob')
-    var mcBoost=document.getElementById('mcBoost')
-    var mcDash=document.getElementById('mcDash')
-    var JR=75, KR=29  // zone radius, knob radius
-
-    if(joystick && jKnob){
-        var jActive=false, jTouchId=null
-        joystick.addEventListener('touchstart',function(e){
-            e.preventDefault()
-            var t=e.changedTouches[0]
-            jTouchId=t.identifier; jActive=true
-            moveJoystick(t)
-        },{passive:false})
-        joystick.addEventListener('touchmove',function(e){
-            e.preventDefault()
-            for(var i=0;i<e.changedTouches.length;i++){
-                if(e.changedTouches[i].identifier===jTouchId) moveJoystick(e.changedTouches[i])
-            }
-        },{passive:false})
-        joystick.addEventListener('touchend',function(e){
-            e.preventDefault()
-            jActive=false; jTouchId=null
-            jKnob.style.left=(JR-KR)+'px'; jKnob.style.top=(JR-KR)+'px'
-            mobileInput.w=mobileInput.a=mobileInput.s=mobileInput.d=false
-        },{passive:false})
-
-        function moveJoystick(t){
-            var rect=joystick.getBoundingClientRect()
-            var cx=rect.left+rect.width/2, cy=rect.top+rect.height/2
-            var dx=t.clientX-cx, dy=t.clientY-cy
-            var dist=Math.hypot(dx,dy)
-            if(dist>JR){dx=dx/dist*JR; dy=dy/dist*JR}
-            jKnob.style.left=(JR-KR+dx)+'px'
-            jKnob.style.top =(JR-KR+dy)+'px'
-            var mx=dx/JR, my=dy/JR
-            mobileInput.w=my<-0.3; mobileInput.s=my>0.3
-            mobileInput.a=mx<-0.3; mobileInput.d=mx>0.3
-        }
-    }
-
-    if(mcBoost){
-        mcBoost.addEventListener('touchstart',function(e){
-            e.preventDefault(); mobileInput.shift=true; mcBoost.classList.add('on')
-        },{passive:false})
-        mcBoost.addEventListener('touchend',function(e){
-            e.preventDefault(); mobileInput.shift=false; mcBoost.classList.remove('on')
-        },{passive:false})
-    }
-    if(mcDash){
-        mcDash.addEventListener('touchstart',function(e){
-            e.preventDefault(); mobileInput.dash=true; mcDash.classList.add('on')
-        },{passive:false})
-        mcDash.addEventListener('touchend',function(e){
-            e.preventDefault(); mobileInput.dash=false; mcDash.classList.remove('on')
-            // dash is one-shot — clear after 1 frame
-            setTimeout(function(){mobileInput.dash=false},50)
-        },{passive:false})
-    }
 
 })()
 </script>
