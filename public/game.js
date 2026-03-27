@@ -16,8 +16,8 @@ const GOAL_R={x:WALL_R,       y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const BALL_R=24,CAR_R=22
 
 // Physics — for client-side prediction only (mirrors host.js exactly)
-const ACCEL=600,FRICTION=0.978,MAX_SPD=420
-const BOOST_ACCEL=1000,BOOST_MAX=680,BOOST_DRAIN=38,BOOST_REGEN=0  // no auto-regen
+const ACCEL=380,FRICTION=0.972,MAX_SPD=280
+const BOOST_ACCEL=700,BOOST_MAX=480,BOOST_DRAIN=38,BOOST_REGEN=0
 const DASH_SPEED=MAX_SPD*1.3,DASH_DUR=0.16,DASH_CD=1.0
 
 // ─── RENDER STATE — var so game.html bootstrap can write these globals ──────
@@ -702,67 +702,29 @@ function drawSpikesOnCar(p, x, y){
 }
 
 
-// ─── CAMERA ─────────────────────────────────────────────────────
-var cam={x:W/2,y:H/2,zoom:1}
-var camTarget={x:W/2,y:H/2,zoom:1}
+// ─── CAMERA — HaxBall style: field always fits window ────────────
+var camScale=1, camOX=0, camOY=0
 
-function updateCamera(dt){
-    const me=playerMap[myId]
-    // Focus point: midpoint between local player and ball, biased toward ball
-    var focX=W/2, focY=H/2
-    if(me&&local.ready){
-        var px=local.x, py=local.y
-        var bx=ball.x, by=ball.y
-        // Weight: 40% player, 60% ball
-        focX=px*0.4+bx*0.6
-        focY=py*0.4+by*0.6
-    } else if(me){
-        focX=me.x*0.4+ball.x*0.6
-        focY=me.y*0.4+ball.y*0.6
-    }
-
-    // Zoom: zoom out when player and ball are far apart
-    var viewW=window.innerWidth, viewH=window.innerHeight
-    var baseZoom=Math.min(viewW/W,viewH/H)
-
-    var dist=0
-    if(me){
-        var dpx=local.ready?local.x:me.x
-        var dpy=local.ready?local.y:me.y
-        dist=Math.hypot(dpx-ball.x,dpy-ball.y)
-    }
-    // zoom range: 1.0x (close) to 0.65x (far), based on distance
-    var zoomFactor=Math.max(0.65,1.0-dist/2200)
-    camTarget.zoom=baseZoom*zoomFactor
-
-    // Clamp focus so we don't show outside the field (with padding)
-    var halfW=(viewW/2)/camTarget.zoom
-    var halfH=(viewH/2)/camTarget.zoom
-    var pad=30
-    focX=Math.max(WALL_L-pad+halfW, Math.min(WALL_R+pad-halfW, focX))
-    focY=Math.max(WALL_T-pad+halfH, Math.min(WALL_B+pad-halfH, focY))
-    camTarget.x=focX; camTarget.y=focY
-
-    // Smooth camera
-    var sp=1-Math.pow(0.01,dt*7)
-    cam.x+=(camTarget.x-cam.x)*sp
-    cam.y+=(camTarget.y-cam.y)*sp
-    cam.zoom+=(camTarget.zoom-cam.zoom)*(1-Math.pow(0.01,dt*5))
+function updateCamera(){
+    var margin=30
+    var sx=(canvas.width-margin*2)/W
+    var sy=(canvas.height-margin*2)/H
+    camScale=Math.min(sx,sy)
+    camOX=canvas.width/2 - W/2*camScale
+    camOY=canvas.height/2 - H/2*camScale
 }
 
 function applyCameraTransform(){
-    var vw=canvas.width, vh=canvas.height
-    ctx.setTransform(cam.zoom,0,0,cam.zoom,
-        vw/2-cam.x*cam.zoom,
-        vh/2-cam.y*cam.zoom)
+    ctx.setTransform(camScale,0,0,camScale,camOX,camOY)
 }
 
-// Canvas — full window size, camera does the zooming
+// Canvas — full window
 function resize(){
     canvas.width=window.innerWidth
     canvas.height=window.innerHeight
     canvas.style.width=window.innerWidth+"px"
     canvas.style.height=window.innerHeight+"px"
+    updateCamera()
 }
 window.addEventListener("resize",resize);resize()
 
@@ -796,7 +758,6 @@ function loop(ts){
         plungerEffects.forEach(function(e){if(e.pid===p.id){e.x1=p.id===myId?(local.ready?local.x:p.x):(p.rx??p.x);e.y1=p.id===myId?(local.ready?local.y:p.y):(p.ry??p.y)}})
     })
     updateParticles(dt);updateTrails(dt)
-    updateCamera(dt)
     ballAngle+=(ball.spin||0)*dt*0.5+dt*0.8;padAng+=dt*1.6
     const dimTarget=gamePhase==="goal"||gamePhase==="over"?0.55:0
     dimAlpha+=(dimTarget-dimAlpha)*Math.min(1,dt*4)
