@@ -32,13 +32,11 @@ const PADS=[
 
 // ─── LUCKY BLOCKS (RUMBLE) ───────────────────────────────────────
 const LUCKY_BLOCKS=[
-    {id:0, x:W*0.25, y:WALL_T+55},   // top-left area
-    {id:1, x:W*0.75, y:WALL_T+55},   // top-right area
-    {id:2, x:W*0.25, y:WALL_B-55},   // bottom-left area
-    {id:3, x:W*0.75, y:WALL_B-55},   // bottom-right area
+    {id:0, x:W*0.25, y:H/2},   // left-center
+    {id:1, x:W*0.75, y:H/2},   // right-center
 ]
-const POWERS=["freeze","punch","plunger","spikes"]
-const LB_RESPAWN=15  // seconds
+const POWERS=["freeze","punch","plunger","spikes","grappling_hook"]
+const LB_RESPAWN=35  // seconds — slower spawn to reduce chaos
 
 const rooms = {}
 
@@ -85,8 +83,8 @@ function makeRoom(){
 function reposition(room){
     const bl=room.players.filter(p=>p.team==="blue")
     const or=room.players.filter(p=>p.team==="orange")
-    bl.forEach((p,i)=>{const s=spawnPos("blue",i,bl.length);p.x=s.x;p.y=s.y;p.vx=0;p.vy=0})
-    or.forEach((p,i)=>{const s=spawnPos("orange",i,or.length);p.x=s.x;p.y=s.y;p.vx=0;p.vy=0})
+    bl.forEach((p,i)=>{const s=spawnPos("blue",i,bl.length);p.x=s.x;p.y=s.y;p.vx=0;p.vy=0;p.spikes=false;p._spikedBall=false;p.spikeTimer=0})
+    or.forEach((p,i)=>{const s=spawnPos("orange",i,or.length);p.x=s.x;p.y=s.y;p.vx=0;p.vy=0;p.spikes=false;p._spikedBall=false;p.spikeTimer=0})
 }
 
 // ─── SOCKETS ─────────────────────────────────────────────────────
@@ -147,7 +145,7 @@ io.on("connection", socket => {
         room.scores={blue:0,orange:0};room.overtime=false;room._otTimer=0
         room.lastTouch={blue:null,orange:null}
         room.luckyBlocks.forEach(b=>{b.active=true;b.timer=0})
-        room.players.forEach(p=>{p.power=null;p.powerCd=0;p.spikes=false;p.spikeTimer=0})
+        room.players.forEach(p=>{p.power=null;p.powerCd=0;p.spikes=false;p.spikeTimer=0;p._spikedBall=false;p._prevPower=false;p._grapplingTimer=0})
         io.to(code).emit("gameStarted",{players:room.players,settings:room.settings})
     })
 
@@ -251,6 +249,10 @@ setInterval(()=>{
             }
             p._prevPower=powerPressed
             if(p.powerCd>0)p.powerCd-=dt
+            // Grappling hook — maintain velocity for lunge duration
+            if(p._grapplingTimer>0){
+                p._grapplingTimer-=dt
+            }
             // Spikes timer
             if(p.spikes){
                 p.spikeTimer-=dt
@@ -442,7 +444,18 @@ function usePower(room,code,p){
         b.frozen=false
         io.to(code).emit("powerUsed",{power:"plunger",pid:p.id,px:p.x,py:p.y,tx:b.x,ty:b.y})
     }
-    else if(power==="spikes"){
+    else if(power==="grappling_hook"){
+        // Launch player toward ball — Rocket League grappling hook style
+        const dx=b.x-p.x, dy=b.y-p.y, dist=Math.hypot(dx,dy)||1
+        const nx=dx/dist, ny=dy/dist
+        // Give player a massive impulse toward the ball
+        const hookSpd=900
+        p.vx=nx*hookSpd; p.vy=ny*hookSpd
+        p._grapplingTimer=0.6  // lunge duration
+        b.frozen=false
+        io.to(code).emit("powerUsed",{power:"grappling_hook",pid:p.id,px:p.x,py:p.y,tx:b.x,ty:b.y})
+    }
+
         // Activate spikes — ball sticks on next contact
         p.spikes=true; p.spikeTimer=8; p._spikedBall=false
         io.to(code).emit("powerUsed",{power:"spikes",pid:p.id})

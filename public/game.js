@@ -206,6 +206,23 @@ var myPower=null  // current power held
 var ballFrozen=false
 var punchEffects=[]  // [{x1,y1,x2,y2,life}]
 var plungerEffects=[] // [{x1,y1,x2,y2,life,progress}]
+var grapplingEffects=[] // [{x1,y1,x2,y2,life,pid}] — hook line from player to ball
+
+// Called by game.html socket handler when powerUsed event fires for grappling_hook
+function spawnGrapplingEffect(pid, px, py, tx, ty){
+    grapplingEffects.push({pid:pid, x1:px, y1:py, x2:tx, y2:ty, life:0.6})
+    // Spawn green burst particles at ball
+    spawnParts(tx, ty, "#00ff88", 12, 200, 0.5, 3)
+}
+
+// onPowerUsed — called by game.html socket "powerUsed" handler
+// game.html should add: else if(d.power==="grappling_hook") onPowerUsed(d)
+var onPowerUsed = function(d){
+    if(d.power==="grappling_hook"){
+        spawnGrapplingEffect(d.pid, d.px, d.py, d.tx, d.ty)
+        if(d.pid===myId){ myPower=null }
+    }
+}
 var spikesPlayers={} // pid -> {active, spiked}
 var luckyBlocks=[]
 
@@ -615,8 +632,8 @@ function drawLuckyBlocks(){
         var x=0,y=0
         // positions match server
         var positions=[
-            {x:W*0.25,y:WALL_T+55},{x:W*0.75,y:WALL_T+55},
-            {x:W*0.25,y:WALL_B-55},{x:W*0.75,y:WALL_B-55}
+            {x:W*0.25,y:H/2},
+            {x:W*0.75,y:H/2}
         ]
         var pos=positions[lb.id]||{x:W/2,y:H/2}
         ctx.save()
@@ -679,7 +696,29 @@ function drawPlungerEffects(){
     })
 }
 
-function drawSpikesOnCar(p, x, y){
+function drawGrapplingEffects(){
+    grapplingEffects.forEach(function(e){
+        var t=Math.max(0,e.life/0.6)
+        ctx.save()
+        ctx.globalAlpha=t*0.9
+        // Chain/rope line toward ball
+        ctx.setLineDash([8,5])
+        ctx.strokeStyle="#00ff88"
+        ctx.lineWidth=3
+        ctx.shadowColor="#00ff88";ctx.shadowBlur=16
+        ctx.beginPath();ctx.moveTo(e.x1,e.y1);ctx.lineTo(e.x2,e.y2);ctx.stroke()
+        ctx.setLineDash([])
+        // Hook tip at ball end
+        var ang=Math.atan2(e.y2-e.y1,e.x2-e.x1)
+        ctx.translate(e.x2,e.y2);ctx.rotate(ang)
+        ctx.shadowBlur=22;ctx.fillStyle="#00ff88"
+        ctx.beginPath();ctx.arc(0,0,7,0,Math.PI*2);ctx.fill()
+        ctx.fillStyle="#ffffff"
+        ctx.beginPath();ctx.arc(0,0,3,0,Math.PI*2);ctx.fill()
+        ctx.restore()
+    })
+}
+
     var sdata=spikesPlayers[p.id]
     if(!sdata||!sdata.active)return
     ctx.save();ctx.translate(x,y)
@@ -740,6 +779,11 @@ function loop(ts){
         plungerEffects[i].x2=ball.x; plungerEffects[i].y2=ball.y
         if(plungerEffects[i].life<=0)plungerEffects.splice(i,1)
     }
+    for(var i=grapplingEffects.length-1;i>=0;i--){
+        grapplingEffects[i].life-=dt
+        grapplingEffects[i].x2=ball.x; grapplingEffects[i].y2=ball.y
+        if(grapplingEffects[i].life<=0)grapplingEffects.splice(i,1)
+    }
 
     if(local.ready&&gamePhase==="playing"){
         if(local.dashing&&!prevDashing)spawnDashParticles(local.x,local.y)
@@ -756,6 +800,7 @@ function loop(ts){
         p._wasDashing=p.dashing
         if(p.id===myId)p.dashCd=local.ready?local.dashCd:(p.dashCd||0)
         plungerEffects.forEach(function(e){if(e.pid===p.id){e.x1=p.id===myId?(local.ready?local.x:p.x):(p.rx??p.x);e.y1=p.id===myId?(local.ready?local.y:p.y):(p.ry??p.y)}})
+        grapplingEffects.forEach(function(e){if(e.pid===p.id){e.x1=p.id===myId?(local.ready?local.x:p.x):(p.rx??p.x);e.y1=p.id===myId?(local.ready?local.y:p.y):(p.ry??p.y)}})
     })
     updateParticles(dt);updateTrails(dt)
     ballAngle+=(ball.spin||0)*dt*0.5+dt*0.8;padAng+=dt*1.6
@@ -771,7 +816,7 @@ function loop(ts){
     applyCameraTransform()
 
     drawArena();drawBoostPads();drawLuckyBlocks();drawTrails();drawParticles()
-    drawPlungerEffects()
+    drawPlungerEffects();drawGrapplingEffects()
     drawBall()
     // Frozen ball tint
     if(ballFrozen){
@@ -814,10 +859,10 @@ function loop(ts){
     if(myPower){
         ctx.font="bold 24px 'Barlow Condensed',sans-serif"
         ctx.textAlign="center"
-        var icon=myPower==="freeze"?"❄️":myPower==="punch"?"👊":myPower==="plunger"?"🪠":myPower==="spikes"?"⚙️":"?"
-        var col=myPower==="plunger"?"#cc44ff":myPower==="spikes"?"#aaaaaa":"#ffd700"
+        var icon=myPower==="freeze"?"❄️":myPower==="punch"?"👊":myPower==="plunger"?"🪠":myPower==="spikes"?"⚙️":myPower==="grappling_hook"?"🪝":"?"
+        var col=myPower==="plunger"?"#cc44ff":myPower==="spikes"?"#aaaaaa":myPower==="grappling_hook"?"#00ff88":"#ffd700"
         ctx.fillStyle=col;ctx.shadowColor=col;ctx.shadowBlur=12
-        ctx.fillText(icon+" "+myPower.toUpperCase()+" [E]",canvas.width/2,canvas.height-18)
+        ctx.fillText(icon+" "+myPower.toUpperCase().replace("_"," ")+" [E]",canvas.width/2,canvas.height-18)
         ctx.shadowBlur=0
     }
     requestAnimationFrame(loop)
