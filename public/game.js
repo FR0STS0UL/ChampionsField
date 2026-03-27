@@ -16,7 +16,7 @@ const GOAL_R={x:WALL_R,       y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const BALL_R=24,CAR_R=22
 
 // Physics — for client-side prediction only (mirrors host.js exactly)
-const ACCEL=900,FRICTION=0.965,MAX_SPD=580
+const ACCEL=900,FRICTION=0.982,MAX_SPD=580
 const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38,BOOST_REGEN=0  // no auto-regen
 const DASH_SPEED=MAX_SPD*1.3,DASH_DUR=0.16,DASH_CD=1.0
 
@@ -205,6 +205,8 @@ var mobileInput={w:false,a:false,s:false,d:false,shift:false,dash:false}
 var myPower=null  // current power held
 var ballFrozen=false
 var punchEffects=[]  // [{x1,y1,x2,y2,life}]
+var plungerEffects=[] // [{x1,y1,x2,y2,life,progress}]
+var spikesPlayers={} // pid -> {active, spiked}
 var luckyBlocks=[]
 
 function getInput(){
@@ -639,14 +641,13 @@ function drawLuckyBlocks(){
 
 function drawPunchEffects(){
     punchEffects.forEach(function(e){
-        var t=e.life/0.35  // fade out
+        var t=e.life/0.35
         ctx.save()
         ctx.globalAlpha=t*0.85
         ctx.strokeStyle="#ff2222"
         ctx.lineWidth=3+t*2
         ctx.shadowColor="#ff0000";ctx.shadowBlur=18
         ctx.beginPath();ctx.moveTo(e.x1,e.y1);ctx.lineTo(e.x2,e.y2);ctx.stroke()
-        // Arrow head at target
         var ang=Math.atan2(e.y2-e.y1,e.x2-e.x1)
         ctx.beginPath()
         ctx.moveTo(e.x2,e.y2)
@@ -655,6 +656,49 @@ function drawPunchEffects(){
         ctx.closePath();ctx.fillStyle="#ff2222";ctx.fill()
         ctx.restore()
     })
+}
+
+function drawPlungerEffects(){
+    plungerEffects.forEach(function(e){
+        var t=Math.max(0,e.life/1.8)
+        ctx.save()
+        ctx.globalAlpha=t*0.75
+        ctx.setLineDash([12,8])
+        ctx.strokeStyle="#cc44ff"
+        ctx.lineWidth=3
+        ctx.shadowColor="#aa22ff";ctx.shadowBlur=14
+        ctx.beginPath();ctx.moveTo(e.x1,e.y1);ctx.lineTo(e.x2,e.y2);ctx.stroke()
+        ctx.setLineDash([])
+        var ang=Math.atan2(e.y2-e.y1,e.x2-e.x1)
+        ctx.translate(e.x2,e.y2);ctx.rotate(ang)
+        ctx.shadowBlur=18;ctx.fillStyle="#cc44ff"
+        ctx.beginPath();ctx.ellipse(0,0,10,7,0,0,Math.PI*2);ctx.fill()
+        ctx.fillStyle="#aa00dd"
+        ctx.beginPath();ctx.rect(-14,-3,14,6);ctx.fill()
+        ctx.restore()
+    })
+}
+
+function drawSpikesOnCar(p, x, y){
+    var sdata=spikesPlayers[p.id]
+    if(!sdata||!sdata.active)return
+    ctx.save();ctx.translate(x,y)
+    var r=CAR_R+5, numSpikes=8
+    ctx.shadowColor="#bbbbbb";ctx.shadowBlur=12
+    for(var i=0;i<numSpikes;i++){
+        var a=(i/numSpikes)*Math.PI*2
+        var ix=Math.cos(a)*r, iy=Math.sin(a)*r
+        var ox=Math.cos(a)*(r+10), oy=Math.sin(a)*(r+10)
+        ctx.strokeStyle=sdata.spiked?"#ffffff":"#999999"
+        ctx.lineWidth=sdata.spiked?3:2
+        ctx.beginPath();ctx.moveTo(ix,iy);ctx.lineTo(ox,oy);ctx.stroke()
+    }
+    var pulse=0.5+0.5*Math.sin(Date.now()*0.008)
+    ctx.globalAlpha=0.3+0.3*pulse
+    ctx.beginPath();ctx.arc(0,0,r+6,0,Math.PI*2)
+    ctx.strokeStyle=sdata.spiked?"#ffffff":"#888888"
+    ctx.lineWidth=1.5;ctx.stroke()
+    ctx.restore()
 }
 
 
@@ -668,9 +712,17 @@ window.addEventListener("resize",resize);resize()
 // ─── MAIN RENDER LOOP ─────────────────────────────────────────────
 let lastTs=0,prevDashing=false
 function loop(ts){
-    // Update punch effects
-    for(var i=punchEffects.length-1;i>=0;i--){punchEffects[i].life-=1/60;if(punchEffects[i].life<=0)punchEffects.splice(i,1)}
     const dt=Math.min((ts-lastTs)/1000,0.05);lastTs=ts
+
+    // Tick effect lists
+    for(var i=punchEffects.length-1;i>=0;i--){punchEffects[i].life-=dt;if(punchEffects[i].life<=0)punchEffects.splice(i,1)}
+    for(var i=plungerEffects.length-1;i>=0;i--){
+        plungerEffects[i].life-=dt
+        // Update rope end to current ball position while active
+        plungerEffects[i].x2=ball.x; plungerEffects[i].y2=ball.y
+        if(plungerEffects[i].life<=0)plungerEffects.splice(i,1)
+    }
+
     if(local.ready&&gamePhase==="playing"){
         if(local.dashing&&!prevDashing)spawnDashParticles(local.x,local.y)
         prevDashing=local.dashing
@@ -685,13 +737,27 @@ function loop(ts){
         if(p.id!==myId&&p.dashing&&!p._wasDashing)spawnDashParticles(p.rx,p.ry)
         p._wasDashing=p.dashing
         if(p.id===myId)p.dashCd=local.ready?local.dashCd:(p.dashCd||0)
+        // Update plunger rope origin to caster's position
+        plungerEffects.forEach(function(e){if(e.pid===p.id){e.x1=p.id===myId?(local.ready?local.x:p.x):(p.rx??p.x);e.y1=p.id===myId?(local.ready?local.y:p.y):(p.ry??p.y)}})
     })
     updateParticles(dt);updateTrails(dt)
     ballAngle+=(ball.spin||0)*dt*0.5+dt*0.8;padAng+=dt*1.6
     const dimTarget=gamePhase==="goal"||gamePhase==="over"?0.55:0
     dimAlpha+=(dimTarget-dimAlpha)*Math.min(1,dt*4)
     ctx.clearRect(0,0,W,H)
-    drawArena();drawBoostPads();drawLuckyBlocks();drawTrails();drawParticles();drawBall();drawPunchEffects()
+    drawArena();drawBoostPads();drawLuckyBlocks();drawTrails();drawParticles()
+    drawPlungerEffects()
+    drawBall()
+    // Frozen ball tint
+    if(ballFrozen){
+        ctx.save();ctx.globalAlpha=0.55
+        ctx.beginPath();ctx.arc(ball.x,ball.y,BALL_R+6,0,Math.PI*2)
+        ctx.fillStyle="#66ccff";ctx.shadowColor="#66ccff";ctx.shadowBlur=18;ctx.fill()
+        // Ice crystal particles occasionally
+        if(Math.random()<0.3)spawnParts(ball.x+(Math.random()-.5)*20,ball.y+(Math.random()-.5)*20,"#aaeeff",1,30,0.6,2)
+        ctx.restore()
+    }
+    drawPunchEffects()
     if(dimAlpha>0.01){ctx.fillStyle=`rgba(0,0,0,${dimAlpha})`;ctx.fillRect(0,0,W,H)}
     getPlayers().forEach(p=>{
         const x=p.id===myId?(local.ready?local.x:p.x):(p.rx??p.x)
@@ -700,7 +766,13 @@ function loop(ts){
         const vy=p.id===myId?(local.ready?local.vy:0):p.vy||0
         const dashing=p.id===myId?(local.ready&&local.dashing):p.dashing
         const boosting=p.id===myId?(local.ready&&getInput().shift&&local.boost>0):p.isBoosting
+        drawSpikesOnCar(p,x,y)
         drawCar(p,x,y,vx,vy,dashing,boosting)
+        // Spikes: emit sparks when ball is stuck
+        var sdata=spikesPlayers[p.id]
+        if(sdata&&sdata.active&&sdata.spiked&&Math.random()<0.4){
+            spawnParts(x+(Math.random()-.5)*30,y+(Math.random()-.5)*30,"#cccccc",2,80,0.35,2)
+        }
     })
     if(gamePhase==="kickoffCountdown"&&kickoffTimer>0){
         ctx.save();ctx.textAlign="center"
@@ -708,23 +780,15 @@ function loop(ts){
         ctx.fillStyle="rgba(255,255,255,0.08)";ctx.fillText(Math.ceil(kickoffTimer),W/2,H/2+60)
         ctx.restore()
     }
-    // Power HUD — show current power in bottom center near boost
+    // Power HUD
     if(myPower){
         ctx.save()
         ctx.font="bold 24px 'Barlow Condensed',sans-serif"
         ctx.textAlign="center"
-        var icon=myPower==="freeze"?"❄️":myPower==="punch"?"👊":"?"
-        ctx.fillStyle="#ffd700"
-        ctx.shadowColor="#ffd700";ctx.shadowBlur=12
+        var icon=myPower==="freeze"?"❄️":myPower==="punch"?"👊":myPower==="plunger"?"🪠":myPower==="spikes"?"⚙️":"?"
+        var col=myPower==="plunger"?"#cc44ff":myPower==="spikes"?"#aaaaaa":"#ffd700"
+        ctx.fillStyle=col;ctx.shadowColor=col;ctx.shadowBlur=12
         ctx.fillText(icon+" "+myPower.toUpperCase()+" [E]", W/2, H-18)
-        ctx.restore()
-    }
-    // Frozen ball tint
-    if(ballFrozen){
-        var bx=ball.x,by=ball.y,br=BALL_R
-        ctx.save();ctx.globalAlpha=0.55
-        ctx.beginPath();ctx.arc(bx,by,br+6,0,Math.PI*2)
-        ctx.fillStyle="#66ccff";ctx.shadowColor="#66ccff";ctx.shadowBlur=18;ctx.fill()
         ctx.restore()
     }
     requestAnimationFrame(loop)

@@ -219,6 +219,13 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
             var p=ensurePlayer(sp.id,{team:sp.team})
             p.x=sp.x;p.y=sp.y;p.vx=sp.vx||0;p.vy=sp.vy||0
             p.boost=sp.boost;p.dashing=sp.dashing;p.isBoosting=sp.isBoosting;p.dashCd=sp.dashCd||0
+            // Sync spikes display state
+            if(sp.spikes){
+                if(!spikesPlayers[sp.id])spikesPlayers[sp.id]={active:true,spiked:!!sp.spikedBall}
+                else{spikesPlayers[sp.id].active=true;spikesPlayers[sp.id].spiked=!!sp.spikedBall}
+            } else if(spikesPlayers[sp.id]){
+                spikesPlayers[sp.id].active=false;spikesPlayers[sp.id].spiked=false
+            }
         })
         var live=new Set(data.players.map(function(p){return p.id}))
         Object.keys(playerMap).forEach(function(id){if(!live.has(id))delete playerMap[id]})
@@ -226,6 +233,7 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
         gamePhase=data.phase||"playing"; kickoffTimer=data.kickoffTimer||0
         if(data.settings)settings=data.settings
         if(data.pads)data.pads.forEach(function(sp,i){if(boostPads[i])boostPads[i].active=sp.active})
+        if(data.luckyBlocks)luckyBlocks=data.luckyBlocks
         updateHUD()
     })
 
@@ -256,15 +264,60 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
         if(data.pid===myId){
             myPower=data.power
         }
+        // Spawn pickup particles at the lucky block location (approximate via player pos)
+        var pp=Object.values(playerMap).find(function(p){return p.id===data.pid})
+        if(pp){
+            var col=data.power==="plunger"?"#cc44ff":data.power==="spikes"?"#aaaaaa":data.power==="freeze"?"#66ccff":"#ff6622"
+            spawnParts(pp.x,pp.y,col,18,200,0.7,4)
+        }
     })
     socket.on("powerUsed",function(data){
         if(data.power==="punch" && data.px!=null){
             punchEffects.push({x1:data.px,y1:data.py,x2:data.tx,y2:data.ty,life:0.35})
+            // Shockwave particles at ball
+            spawnParts(data.tx,data.ty,"#ff4444",20,320,0.5,4)
         }
         if(data.power==="freeze"){
             ballFrozen=true
+            // Freeze burst particles
+            spawnParts(ball.x,ball.y,"#66ccff",30,160,0.9,4)
+            spawnParts(ball.x,ball.y,"#ffffff",12,80,0.6,2)
+        }
+        if(data.power==="plunger" && data.px!=null){
+            // Add plunger rope effect (caster → ball, updated every frame)
+            plungerEffects.push({pid:data.pid,x1:data.px,y1:data.py,x2:data.tx,y2:data.ty,life:1.8})
+            spawnParts(data.px,data.py,"#cc44ff",14,180,0.55,3)
+            spawnParts(data.tx,data.ty,"#cc44ff",10,120,0.45,3)
+        }
+        if(data.power==="spikes"){
+            spikesPlayers[data.pid]={active:true,spiked:false}
+            // Metal sparks on activation
+            var sp=Object.values(playerMap).find(function(p){return p.id===data.pid})
+            if(sp) spawnParts(sp.x,sp.y,"#aaaaaa",16,200,0.5,3)
         }
         if(data.pid===myId) myPower=null
+    })
+
+    socket.on("freezeEnd",function(){
+        ballFrozen=false
+        spawnParts(ball.x,ball.y,"#66ccff",12,100,0.5,3)
+    })
+
+    socket.on("spikesAttach",function(data){
+        if(spikesPlayers[data.pid]) spikesPlayers[data.pid].spiked=true
+        else spikesPlayers[data.pid]={active:true,spiked:true}
+        // Impact sparks
+        var sp=Object.values(playerMap).find(function(p){return p.id===data.pid})
+        if(sp) spawnParts(sp.x,sp.y,"#ffffff",20,260,0.5,3)
+    })
+    socket.on("spikesDetach",function(data){
+        if(spikesPlayers[data.pid]){spikesPlayers[data.pid].active=false;spikesPlayers[data.pid].spiked=false}
+        // Burst of grey sparks on detach
+        var sp=Object.values(playerMap).find(function(p){return p.id===data.pid})
+        if(sp) spawnParts(sp.x,sp.y,"#cccccc",28,300,0.6,4)
+    })
+    socket.on("spikesEnd",function(data){
+        if(spikesPlayers[data.pid]){spikesPlayers[data.pid].active=false;spikesPlayers[data.pid].spiked=false}
     })
 
     // Input loop

@@ -17,7 +17,7 @@ const GOAL_W=40,GOAL_H=200,GOAL_CY=H/2
 const GOAL_L={x:WALL_L-GOAL_W,y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const GOAL_R={x:WALL_R,y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const BALL_R=24,CAR_R=22,DT=1/60
-const ACCEL=900,FRICTION=0.965,MAX_SPD=580
+const ACCEL=900,FRICTION=0.982,MAX_SPD=580
 const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38
 const DASH_SPEED=MAX_SPD*1.3,DASH_DUR=0.16,DASH_CD=1.0
 const PADS=[
@@ -37,7 +37,7 @@ const LUCKY_BLOCKS=[
     {id:2, x:W*0.25, y:WALL_B-55},   // bottom-left area
     {id:3, x:W*0.75, y:WALL_B-55},   // bottom-right area
 ]
-const POWERS=["freeze","punch"]
+const POWERS=["freeze","punch","plunger","spikes"]
 const LB_RESPAWN=15  // seconds
 
 const rooms = {}
@@ -62,7 +62,7 @@ function makePlayer(id,d){
         x:team==="blue"?WALL_L+160:WALL_R-160, y:H/2,
         vx:0,vy:0,
         boost:33,dashing:false,dashTimer:0,dashCd:0,dashVx:0,dashVy:0,
-        power:null,powerCd:0,
+        power:null,powerCd:0,spikes:false,spikeTimer:0,
         input:{},lastSeq:0
     }
 }
@@ -147,7 +147,7 @@ io.on("connection", socket => {
         room.scores={blue:0,orange:0};room.overtime=false;room._otTimer=0
         room.lastTouch={blue:null,orange:null}
         room.luckyBlocks.forEach(b=>{b.active=true;b.timer=0})
-        room.players.forEach(p=>{p.power=null;p.powerCd=0})
+        room.players.forEach(p=>{p.power=null;p.powerCd=0;p.spikes=false;p.spikeTimer=0})
         io.to(code).emit("gameStarted",{players:room.players,settings:room.settings})
     })
 
@@ -247,15 +247,47 @@ setInterval(()=>{
                 usePower(room,code,p)
             }
             if(p.powerCd>0)p.powerCd-=dt
+            // Spikes timer
+            if(p.spikes){
+                p.spikeTimer-=dt
+                if(p.spikeTimer<=0){p.spikes=false;io.to(code).emit("spikesEnd",{pid:p.id})}
+            }
         })
 
         const b=room.ball
         // Frozen ball
         if(b.frozen){
             b._frozenTimer-=dt; b.vx=0; b.vy=0
-            if(b._frozenTimer<=0){b.frozen=false}
+            if(b._frozenTimer<=0){b.frozen=false;io.to(code).emit("freezeEnd",{})}
         } else {
             b.vx*=Math.pow(0.9940,dt*60);b.vy*=Math.pow(0.9940,dt*60)
+        }
+
+        // Plunger — pull ball toward player
+        if(b._plungerPid){
+            b._plungerTimer-=dt
+            const puller=room.players.find(p=>p.id===b._plungerPid)
+            if(puller&&b._plungerTimer>0){
+                const dx=puller.x-b.x,dy=puller.y-b.y,dist=Math.hypot(dx,dy)||1
+                const pull=Math.min(2800*dt, dist)
+                b.vx+=(dx/dist)*pull/dt*0.18
+                b.vy+=(dy/dist)*pull/dt*0.18
+                // Cap speed during pull
+                const spd=Math.hypot(b.vx,b.vy)
+                if(spd>900){b.vx=b.vx/spd*900;b.vy=b.vy/spd*900}
+                io.to(code).emit("plungerPull",{bx:b.x,by:b.y,px:puller.x,py:puller.y})
+            } else {
+                b._plungerPid=null
+            }
+        }
+
+        // Spikes — ball sticks to player
+        const spikedPlayer=room.players.find(p=>p.spikes&&p._spikedBall)
+        if(spikedPlayer){
+            b.x=spikedPlayer.x+spikedPlayer._spikeOffX
+            b.y=spikedPlayer.y+spikedPlayer._spikeOffY
+            b.vx=spikedPlayer.vx; b.vy=spikedPlayer.vy
+            b.frozen=false
         }
         b.spin*=Math.pow(0.990,dt*60);b.x+=b.vx*dt;b.y+=b.vy*dt
 
@@ -276,18 +308,60 @@ setInterval(()=>{
             const dx=b.x-p.x,dy=b.y-p.y,dist=Math.hypot(dx,dy),minD=BALL_R+CAR_R
             if(dist<minD&&dist>0.01){
                 const nx=dx/dist,ny=dy/dist
-                b.x+=nx*(minD-dist);b.y+=ny*(minD-dist)*0.5
-                const rvx=b.vx-p.vx,rvy=b.vy-p.vy,relV=rvx*nx+rvy*ny
-                if(relV<0){
-                    // Cap car speed contribution so dash doesn't launch ball across the map
-                    const cspd=Math.min(Math.hypot(p.vx,p.vy), MAX_SPD*1.1)
-                    const imp=Math.min(Math.max(200,-(1.4)*relV+cspd*0.6), 900)
-                    b.vx+=nx*imp;b.vy+=ny*imp;b.spin+=nx*imp*0.05
-                    room.lastTouch[p.team]=p.id  // track who last touched
-                    if(room.ball.frozen){room.ball.frozen=false;room.ball.vx=room.ball._frozenVx||0;room.ball.vy=room.ball._frozenVy||0}
+                // Spikes: if this player has spikes, ball sticks to them
+                if(p.spikes&&!p._spikedBall){
+                    p._spikedBall=true
+                    p._spikeOffX=b.x-p.x; p._spikeOffY=b.y-p.y
+                    b.frozen=false; b._plungerPid=null
+                    io.to(code).emit("spikesAttach",{pid:p.id})
+                }
+                // Spikes: if another player hits the spiked player or ball, detach
+                const spiked=room.players.find(q=>q.spikes&&q._spikedBall&&q.id!==p.id)
+                if(spiked){
+                    spiked.spikes=false; spiked._spikedBall=false; spiked.spikeTimer=0
+                    io.to(code).emit("spikesDetach",{pid:spiked.id,byPid:p.id})
+                }
+                if(!p._spikedBall){
+                    b.x+=nx*(minD-dist);b.y+=ny*(minD-dist)*0.5
+                    const rvx=b.vx-p.vx,rvy=b.vy-p.vy,relV=rvx*nx+rvy*ny
+                    if(relV<0){
+                        const cspd=Math.min(Math.hypot(p.vx,p.vy), MAX_SPD*1.1)
+                        const imp=Math.min(Math.max(200,-(1.4)*relV+cspd*0.6), 900)
+                        b.vx+=nx*imp;b.vy+=ny*imp;b.spin+=nx*imp*0.05
+                        room.lastTouch[p.team]=p.id
+                        if(room.ball.frozen){room.ball.frozen=false;room.ball.vx=room.ball._frozenVx||0;room.ball.vy=room.ball._frozenVy||0}
+                    }
                 }
             }
         })
+
+        // Player-player collision — also detaches spikes
+        for(let i=0;i<room.players.length;i++){
+            for(let j=i+1;j<room.players.length;j++){
+                const a=room.players[i],bpl=room.players[j]
+                const ddx=a.x-bpl.x,ddy=a.y-bpl.y,dd=Math.hypot(ddx,ddy),minD2=CAR_R*2
+                if(dd<minD2&&dd>0.01){
+                    // Detach spikes if either player is spiked
+                    ;[a,bpl].forEach(q=>{
+                        if(q.spikes&&q._spikedBall){
+                            q.spikes=false;q._spikedBall=false;q.spikeTimer=0
+                            io.to(code).emit("spikesDetach",{pid:q.id,byPid:(q===a?bpl:a).id})
+                        }
+                    })
+                    // Bounce players apart
+                    const nx2=ddx/dd,ny2=ddy/dd
+                    const overlap=(minD2-dd)/2
+                    a.x+=nx2*overlap;a.y+=ny2*overlap
+                    bpl.x-=nx2*overlap;bpl.y-=ny2*overlap
+                    const rv=(a.vx-bpl.vx)*nx2+(a.vy-bpl.vy)*ny2
+                    if(rv<0){
+                        const imp=rv*0.6
+                        a.vx-=imp*nx2;a.vy-=imp*ny2
+                        bpl.vx+=imp*nx2;bpl.vy+=imp*ny2
+                    }
+                }
+            }
+        }
 
         if(!room.overtime) room.matchTime-=dt
         if(room.overtime) room._otTimer=(room._otTimer||0)+dt
@@ -326,12 +400,14 @@ function buildState(room){
             dashTimer:+(p.dashTimer||0).toFixed(3),
             dashCd:+(p.dashCd||0).toFixed(2),
             isBoosting:!!(p.input&&p.input.shift&&p.boost>0),
-            seq:p.lastSeq||0,power:p.power||null
+            seq:p.lastSeq||0,power:p.power||null,
+            spikes:p.spikes||false,spikedBall:p._spikedBall||false
         })),
         ball:{x:Math.round(room.ball.x),y:Math.round(room.ball.y),spin:+room.ball.spin.toFixed(2)},
         pads:room.pads.map(p=>({active:p.active})),
         luckyBlocks:room.luckyBlocks.map(b=>({id:b.id,active:b.active})),
         ballFrozen:room.ball.frozen||false,
+        luckyBlocks:room.luckyBlocks.map(b=>({id:b.id,active:b.active})),
         scores:room.scores,matchTime:room.overtime?-Math.floor(room._otTimer||0):Math.ceil(room.matchTime),
         settings:room.settings,phase:room.phase,
         kickoffTimer:Math.ceil(room.kickoffTimer||0)
@@ -357,9 +433,17 @@ function usePower(room,code,p){
         b.frozen=false
         io.to(code).emit("powerUsed",{power:"punch",pid:p.id,px:p.x,py:p.y,tx:b.x,ty:b.y})
     }
-}
-
-function handleGoal(room,code,scorer){
+    else if(power==="plunger"){
+        // Pull ball toward player — Rocket League Rumble style
+        b._plungerPid=p.id; b._plungerTimer=1.8
+        b.frozen=false
+        io.to(code).emit("powerUsed",{power:"plunger",pid:p.id,px:p.x,py:p.y,tx:b.x,ty:b.y})
+    }
+    else if(power==="spikes"){
+        // Activate spikes — ball sticks on next contact
+        p.spikes=true; p.spikeTimer=8; p._spikedBall=false
+        io.to(code).emit("powerUsed",{power:"spikes",pid:p.id})
+    }(room,code,scorer){
     room.phase="goal"; room.scores[scorer]++
     room.settings.gameNum=(room.settings.gameNum||1)+1
     const frozenTime = room.matchTime
