@@ -61,7 +61,8 @@ function makeRoom(){
         ball:{x:W/2,y:H/2,vx:0,vy:0,spin:0},
         pads:PADS.map(p=>({...p,active:true,timer:0})),
         scores:{blue:0,orange:0}, matchTime:300,
-        phase:"lobby", kickoffTimer:3,
+        phase:"lobby", kickoffTimer:3, overtime:false,
+        lastTouch:{blue:null,orange:null},
         settings:{
             blueTeamName:"BLUE",orangeTeamName:"ORANGE",
             blueColor:"#00aaff",orangeColor:"#ff6600",
@@ -131,7 +132,8 @@ io.on("connection", socket => {
         room.ball={x:W/2,y:H/2,vx:0,vy:0,spin:0}
         room.pads.forEach(p=>{p.active=true;p.timer=0})
         room.matchTime=300;room.phase="kickoffCountdown";room.kickoffTimer=3
-        room.scores={blue:0,orange:0}
+        room.scores={blue:0,orange:0};room.overtime=false;room._otTimer=0
+        room.lastTouch={blue:null,orange:null}
         io.to(code).emit("gameStarted",{players:room.players,settings:room.settings})
     })
 
@@ -206,21 +208,21 @@ setInterval(()=>{
         room.pads.forEach(pad=>{if(!pad.active&&--pad.timer<=0)pad.active=true})
 
         const b=room.ball
-        b.vx*=Math.pow(0.9985,dt*60);b.vy*=Math.pow(0.9985,dt*60)
+        b.vx*=Math.pow(0.9940,dt*60);b.vy*=Math.pow(0.9940,dt*60)
         b.spin*=Math.pow(0.990,dt*60);b.x+=b.vx*dt;b.y+=b.vy*dt
 
         if(b.x-BALL_R<WALL_L){
             const inG=b.y>GOAL_L.y&&b.y<GOAL_L.y+GOAL_L.h
             if(inG&&b.x+BALL_R<GOAL_L.x){handleGoal(room,code,"orange");continue}
-            else if(!inG){b.x=WALL_L+BALL_R;b.vx=Math.abs(b.vx)*0.72;b.spin=-b.spin*0.5}
+            else if(!inG){b.x=WALL_L+BALL_R;b.vx=Math.abs(b.vx)*0.52;b.spin=-b.spin*0.4}
         }
         if(b.x+BALL_R>WALL_R){
             const inG=b.y>GOAL_R.y&&b.y<GOAL_R.y+GOAL_R.h
             if(inG&&b.x-BALL_R>GOAL_R.x+GOAL_R.w){handleGoal(room,code,"blue");continue}
-            else if(!inG){b.x=WALL_R-BALL_R;b.vx=-Math.abs(b.vx)*0.72;b.spin=-b.spin*0.5}
+            else if(!inG){b.x=WALL_R-BALL_R;b.vx=-Math.abs(b.vx)*0.52;b.spin=-b.spin*0.4}
         }
-        if(b.y-BALL_R<WALL_T){b.y=WALL_T+BALL_R;b.vy=Math.abs(b.vy)*0.72}
-        if(b.y+BALL_R>WALL_B){b.y=WALL_B-BALL_R;b.vy=-Math.abs(b.vy)*0.72}
+        if(b.y-BALL_R<WALL_T){b.y=WALL_T+BALL_R;b.vy=Math.abs(b.vy)*0.52}
+        if(b.y+BALL_R>WALL_B){b.y=WALL_B-BALL_R;b.vy=-Math.abs(b.vy)*0.52}
 
         room.players.forEach(p=>{
             const dx=b.x-p.x,dy=b.y-p.y,dist=Math.hypot(dx,dy),minD=BALL_R+CAR_R
@@ -233,23 +235,34 @@ setInterval(()=>{
                     const cspd=Math.min(Math.hypot(p.vx,p.vy), MAX_SPD*1.1)
                     const imp=Math.min(Math.max(200,-(1.4)*relV+cspd*0.6), 900)
                     b.vx+=nx*imp;b.vy+=ny*imp;b.spin+=nx*imp*0.05
+                    room.lastTouch[p.team]=p.id  // track who last touched
                 }
             }
         })
 
-        room.matchTime-=dt
-        if(room.matchTime<=0){
-            room.matchTime=0; room.phase="over"
-            io.to(code).emit("gameOver",room.scores)
-            // Reset to lobby after 6s so returning players can restart
-            setTimeout(()=>{
-                if(rooms[code]){
-                    rooms[code].phase="lobby"
-                    rooms[code].scores={blue:0,orange:0}
-                    rooms[code].settings.gameNum=1
-                    io.to(code).emit("lobbyUpdate",{players:rooms[code].players,settings:rooms[code].settings})
-                }
-            },6000)
+        if(!room.overtime) room.matchTime-=dt
+        if(room.overtime) room._otTimer=(room._otTimer||0)+dt
+        if(room.matchTime<=0 && !room.overtime){
+            room.matchTime=0
+            if(room.scores.blue===room.scores.orange){
+                // Tied — enter overtime
+                room.overtime=true
+                room.phase="kickoffCountdown"; room.kickoffTimer=3
+                room.ball={x:W/2,y:H/2,vx:0,vy:0,spin:0}
+                room.pads.forEach(p=>{p.active=true;p.timer=0})
+                reposition(room)
+                io.to(code).emit("overtime",{scores:room.scores,settings:room.settings})
+            } else {
+                room.phase="over"
+                io.to(code).emit("gameOver",room.scores)
+                setTimeout(()=>{
+                    if(rooms[code]){
+                        rooms[code].phase="lobby"; rooms[code].overtime=false
+                        rooms[code].scores={blue:0,orange:0}; rooms[code].settings.gameNum=1
+                        io.to(code).emit("lobbyUpdate",{players:rooms[code].players,settings:rooms[code].settings})
+                    }
+                },6000)
+            }
         }
         io.to(code).emit("state",buildState(room))
     }
@@ -268,7 +281,7 @@ function buildState(room){
         })),
         ball:{x:Math.round(room.ball.x),y:Math.round(room.ball.y),spin:+room.ball.spin.toFixed(2)},
         pads:room.pads.map(p=>({active:p.active})),
-        scores:room.scores,matchTime:Math.ceil(room.matchTime),
+        scores:room.scores,matchTime:room.overtime?-Math.floor(room._otTimer||0):Math.ceil(room.matchTime),
         settings:room.settings,phase:room.phase,
         kickoffTimer:Math.ceil(room.kickoffTimer||0)
     }
@@ -278,7 +291,9 @@ function handleGoal(room,code,scorer){
     room.settings.gameNum=(room.settings.gameNum||1)+1
     // Freeze time at current value — don't reset it
     const frozenTime = room.matchTime
-    io.to(code).emit("goal",{scorer,scores:room.scores,settings:room.settings})
+    const scorerName=(room.players.find(p=>p.id===room.lastTouch[scorer])||{}).name||scorer
+    const scorerPfp=(room.players.find(p=>p.id===room.lastTouch[scorer])||{}).pfp||''
+    io.to(code).emit("goal",{scorer,scores:room.scores,settings:room.settings,scorerName,scorerPfp})
     setTimeout(()=>{
         reposition(room)
         room.ball={x:W/2,y:H/2,vx:0,vy:0,spin:0}

@@ -225,12 +225,21 @@ function updateHUD(){
     if(el("sb-series-title"))el("sb-series-title").textContent=settings.seriesTitle||"FRIENDLY"
     if(el("sb-game-num"))   el("sb-game-num").textContent="GAME "+(settings.gameNum||1)
     if(el("sb-best-of"))    el("sb-best-of").textContent="BEST OF "+(settings.bestOf||7)
-    const m=Math.floor(matchTime/60),s=Math.floor(matchTime%60)
     const te=el("hud-timer"); if(te){
-        te.textContent=`${m}:${s.toString().padStart(2,"0")}`
-        const low=matchTime>0&&matchTime<=10
-        te.style.color=low?"#ff3333":"#fff";te.style.fontSize=low?"34px":"28px"
-        te.style.textShadow=low?"0 0 20px #ff333388":"none"
+        if(matchTime<0){
+            // Overtime — count up from 0
+            const ot=Math.abs(matchTime)
+            const m=Math.floor(ot/60),s=Math.floor(ot%60)
+            te.textContent=`+${m}:${s.toString().padStart(2,"0")}`
+            te.style.color="#ff9900";te.style.fontSize="28px"
+            te.style.textShadow="0 0 20px #ff990088"
+        } else {
+            const m=Math.floor(matchTime/60),s=Math.floor(matchTime%60)
+            te.textContent=`${m}:${s.toString().padStart(2,"0")}`
+            const low=matchTime>0&&matchTime<=10
+            te.style.color=low?"#ff3333":"#fff";te.style.fontSize=low?"34px":"28px"
+            te.style.textShadow=low?"0 0 20px #ff333388":"none"
+        }
     }
     const ke=el("kickoff-countdown"); if(ke){
         if(gamePhase==="kickoffCountdown"&&kickoffTimer>0){ke.textContent=kickoffTimer;ke.style.display="block"}
@@ -251,13 +260,27 @@ function drawBoostCircle(pct,color){
     c.beginPath();c.arc(cx,cy,r,start,end);c.strokeStyle=color;c.lineWidth=8
     c.shadowColor=color;c.shadowBlur=12;c.stroke();c.shadowBlur=0
 }
-function showGoalBanner(team){
+function showGoalBanner(team, scorerName, scorerPfp){
     const color=team==="blue"?(settings.blueColor||"#00aaff"):(settings.orangeColor||"#ff6600")
-    const name=team==="blue"?(settings.blueTeamName||"BLUE"):(settings.orangeTeamName||"ORANGE")
-    document.getElementById("goalWord").style.color=color
-    document.getElementById("goalWord").style.textShadow=`0 0 60px ${color}88`
-    document.getElementById("goalWord").textContent="¡GOL!"
-    document.getElementById("goalSub").textContent=name+" ANOTA"
+    const teamName=team==="blue"?(settings.blueTeamName||"BLUE"):(settings.orangeTeamName||"ORANGE")
+    const gw=document.getElementById("goalWord")
+    const gs=document.getElementById("goalSub")
+    const sc=document.getElementById("scorerCard")
+    const sn=document.getElementById("scorerName")
+    const sp=document.getElementById("scorerPfp")
+    gw.style.color=color; gw.style.textShadow=`0 0 60px ${color}88`
+    gw.textContent="¡GOL!"
+    gs.textContent=teamName+" ANOTA"
+    if(sc && sn && scorerName){
+        sn.textContent=scorerName.toUpperCase()
+        sn.style.color=color
+        if(sp && scorerPfp){ sp.src=scorerPfp; sp.style.display="block" }
+        else if(sp) sp.style.display="none"
+        sc.style.display="flex"
+        sc.style.borderColor=color+"55"
+    } else if(sc){
+        sc.style.display="none"
+    }
     document.getElementById("goalBanner").classList.add("show")
 }
 function showGameOver(sc){

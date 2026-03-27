@@ -33,6 +33,10 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
 #goalBanner.show{opacity:1;}
 #goalWord{font-size:100px;font-weight:900;letter-spacing:14px;text-transform:uppercase;}
 #goalSub{font-size:16px;letter-spacing:4px;opacity:.6;margin-top:8px;text-align:center;}
+#scorerCard{display:flex;align-items:center;gap:14px;margin-top:18px;background:rgba(0,0,0,0.6);border-radius:10px;padding:10px 20px;border:1px solid rgba(255,255,255,0.15);backdrop-filter:blur(8px);}
+#scorerCard img{width:52px;height:52px;border-radius:8px;object-fit:cover;border:2px solid rgba(255,255,255,0.3);}
+#scorerName{font-size:22px;font-weight:900;letter-spacing:3px;text-transform:uppercase;}
+#overtimeBadge{font-size:13px;letter-spacing:4px;color:#ff9900;font-weight:800;text-shadow:0 0 12px #ff9900;margin-top:6px;}
 #connecting{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#050810;z-index:50;gap:16px;}
 #connecting h2{font-size:28px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#00aaff;}
 #connecting p{font-size:13px;opacity:.5;}
@@ -94,8 +98,13 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
   </div>
   <div id="kickoff-countdown">3</div>
   <div id="goalBanner">
+    <div id="overtimeBadge" style="display:none">⏱ OVERTIME</div>
     <div id="goalWord">¡GOL!</div>
     <div id="goalSub">INCREÍBLE</div>
+    <div id="scorerCard" style="display:none">
+      <img id="scorerPfp" src="" onerror="this.style.display='none'">
+      <div id="scorerName">JUGADOR</div>
+    </div>
   </div>
 
   <!-- Mobile controls -->
@@ -216,13 +225,23 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
     socket.on("goal",function(data){
         if(data.settings)settings=data.settings
         scores=data.scores; local.ready=false; dimAlpha=1
-        showGoalBanner(data.scorer); spawnGoalExplosion(data.scorer); updateHUD()
+        showGoalBanner(data.scorer,data.scorerName,data.scorerPfp)
+        spawnGoalExplosion(data.scorer); updateHUD()
         document.getElementById("goalBanner").classList.add("show")
     })
     socket.on("kickoff",function(data){
         if(data.settings)settings=data.settings
         scores=data.scores; dimAlpha=0
-        document.getElementById("goalBanner").classList.remove("show"); updateHUD()
+        document.getElementById("goalBanner").classList.remove("show")
+        var sc=document.getElementById("scorerCard"); if(sc)sc.style.display="none"
+        updateHUD()
+    })
+    socket.on("overtime",function(data){
+        if(data.settings)settings=data.settings; scores=data.scores
+        var ob=document.getElementById("overtimeBadge"); if(ob)ob.style.display="block"
+        var te=document.getElementById("hud-timer"); if(te){te.textContent="OT";te.style.color="#ff9900";te.style.textShadow="0 0 16px #ff990088"}
+        document.getElementById("goalBanner").classList.remove("show")
+        dimAlpha=0; updateHUD()
     })
     socket.on("gameOver",function(sc){scores=sc; showGameOver(sc)})
 
