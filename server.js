@@ -443,7 +443,10 @@ function usePower(room,code,p){
         // Activate spikes — ball sticks on next contact
         p.spikes=true; p.spikeTimer=8; p._spikedBall=false
         io.to(code).emit("powerUsed",{power:"spikes",pid:p.id})
-    }(room,code,scorer){
+    }
+}
+
+function handleGoal(room,code,scorer){
     room.phase="goal"; room.scores[scorer]++
     room.settings.gameNum=(room.settings.gameNum||1)+1
     const frozenTime = room.matchTime
