@@ -267,7 +267,7 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
         // Spawn pickup particles at the lucky block location (approximate via player pos)
         var pp=Object.values(playerMap).find(function(p){return p.id===data.pid})
         if(pp){
-            var col=data.power==="plunger"?"#cc44ff":data.power==="spikes"?"#aaaaaa":data.power==="freeze"?"#66ccff":"#ff6622"
+            var col=data.power==="plunger"?"#cc44ff":data.power==="spikes"?"#aaaaaa":data.power==="freeze"?"#66ccff":data.power==="grappling_hook"?"#00ff88":"#ff6622"
             spawnParts(pp.x,pp.y,col,18,200,0.7,4)
         }
     })
@@ -294,6 +294,12 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
             // Metal sparks on activation
             var sp=Object.values(playerMap).find(function(p){return p.id===data.pid})
             if(sp) spawnParts(sp.x,sp.y,"#aaaaaa",16,200,0.5,3)
+        }
+        if(data.power==="grappling_hook" && data.px!=null){
+            // Green hook line from player toward ball
+            grapplingEffects.push({pid:data.pid,x1:data.px,y1:data.py,x2:data.tx,y2:data.ty,life:0.6})
+            spawnParts(data.tx,data.ty,"#00ff88",16,240,0.5,3)
+            spawnParts(data.px,data.py,"#00ff88",8,140,0.4,3)
         }
         if(data.pid===myId) myPower=null
     })
