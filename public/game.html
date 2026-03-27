@@ -33,9 +33,12 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
 #goalBanner.show{opacity:1;}
 #goalWord{font-size:100px;font-weight:900;letter-spacing:14px;text-transform:uppercase;}
 #goalSub{font-size:16px;letter-spacing:4px;opacity:.6;margin-top:8px;text-align:center;}
-#scorerCard{display:flex;align-items:center;gap:14px;margin-top:18px;background:rgba(0,0,0,0.6);border-radius:10px;padding:10px 20px;border:1px solid rgba(255,255,255,0.15);backdrop-filter:blur(8px);}
-#scorerCard img{width:52px;height:52px;border-radius:8px;object-fit:cover;border:2px solid rgba(255,255,255,0.3);}
+#scorerCard{display:flex;align-items:center;gap:14px;margin-top:18px;border-radius:10px;padding:0 20px 0 0;border:1px solid rgba(255,255,255,0.2);overflow:hidden;min-width:280px;position:relative;}
+#scorerBanner{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0.4;z-index:0;}
+#scorerCard img{width:64px;height:64px;object-fit:cover;flex-shrink:0;position:relative;z-index:1;}
+#scorerInfo{display:flex;flex-direction:column;position:relative;z-index:1;}
 #scorerName{font-size:22px;font-weight:900;letter-spacing:3px;text-transform:uppercase;}
+#scorerTitle{font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;opacity:0.7;margin-top:2px;}
 #overtimeBadge{font-size:13px;letter-spacing:4px;color:#ff9900;font-weight:800;text-shadow:0 0 12px #ff9900;margin-top:6px;}
 #connecting{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#050810;z-index:50;gap:16px;}
 #connecting h2{font-size:28px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#00aaff;}
@@ -102,8 +105,12 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
     <div id="goalWord">¡GOL!</div>
     <div id="goalSub">INCREÍBLE</div>
     <div id="scorerCard" style="display:none">
+      <div id="scorerBanner"></div>
       <img id="scorerPfp" src="" onerror="this.style.display='none'">
-      <div id="scorerName">JUGADOR</div>
+      <div id="scorerInfo">
+        <div id="scorerName">JUGADOR</div>
+        <div id="scorerTitle"></div>
+      </div>
     </div>
   </div>
 
@@ -244,6 +251,21 @@ html,body{width:100%;height:100%;background:#050810;overflow:hidden;color:#fff;f
         dimAlpha=0; updateHUD()
     })
     socket.on("gameOver",function(sc){scores=sc; showGameOver(sc)})
+
+    socket.on("powerPickup",function(data){
+        if(data.pid===myId){
+            myPower=data.power
+        }
+    })
+    socket.on("powerUsed",function(data){
+        if(data.power==="punch" && data.px!=null){
+            punchEffects.push({x1:data.px,y1:data.py,x2:data.tx,y2:data.ty,life:0.35})
+        }
+        if(data.power==="freeze"){
+            ballFrozen=true
+        }
+        if(data.pid===myId) myPower=null
+    })
 
     // Input loop
     var seq=0

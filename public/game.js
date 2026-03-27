@@ -16,7 +16,7 @@ const GOAL_R={x:WALL_R,       y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const BALL_R=24,CAR_R=22
 
 // Physics — for client-side prediction only (mirrors host.js exactly)
-const ACCEL=900,FRICTION=0.88,MAX_SPD=580
+const ACCEL=900,FRICTION=0.965,MAX_SPD=580
 const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38,BOOST_REGEN=0  // no auto-regen
 const DASH_SPEED=MAX_SPD*1.3,DASH_DUR=0.16,DASH_CD=1.0
 
@@ -87,9 +87,12 @@ function physicsStep(s,inp,dt){
         s.dashing=true;s.dashTimer=DASH_DUR;s.dashCd=DASH_CD
     }
     if(s.dashing){
-        const t=s.dashTimer/DASH_DUR
-        s.vx=s.dashVx*t;s.vy=s.dashVy*t
-        s.dashTimer-=dt;if(s.dashTimer<=0)s.dashing=false
+        s.vx=s.dashVx;s.vy=s.dashVy
+        s.dashTimer-=dt
+        if(s.dashTimer<=0){
+            s.dashing=false
+            s.vx=s.dashVx*0.6;s.vy=s.dashVy*0.6
+        }
     } else {
         if(inp.w)s.vy-=ACCEL*dt;if(inp.s)s.vy+=ACCEL*dt
         if(inp.a)s.vx-=ACCEL*dt;if(inp.d)s.vx+=ACCEL*dt
@@ -190,13 +193,19 @@ const keys={}
 document.addEventListener("keydown",e=>{
     const k=e.key==="Shift"?"shift":e.code==="Space"?"dash":e.key.toLowerCase()
     keys[k]=true; if(e.code==="Space")e.preventDefault()
+    if(e.code==="KeyE")keys.power=true
 })
 document.addEventListener("keyup",e=>{
     const k=e.key==="Shift"?"shift":e.code==="Space"?"dash":e.key.toLowerCase()
     keys[k]=false
+    if(e.code==="KeyE")keys.power=false
 })
 // Mobile input — set by game.html touch handlers, read by getInput()
 var mobileInput={w:false,a:false,s:false,d:false,shift:false,dash:false}
+var myPower=null  // current power held
+var ballFrozen=false
+var punchEffects=[]  // [{x1,y1,x2,y2,life}]
+var luckyBlocks=[]
 
 function getInput(){
     return{
@@ -205,7 +214,8 @@ function getInput(){
         s:    !!keys.s    || mobileInput.s,
         d:    !!keys.d    || mobileInput.d,
         shift:!!keys.shift|| mobileInput.shift,
-        dash: !!keys.dash || mobileInput.dash
+        dash: !!keys.dash || mobileInput.dash,
+        power:!!keys.power
     }
 }
 
@@ -260,24 +270,30 @@ function drawBoostCircle(pct,color){
     c.beginPath();c.arc(cx,cy,r,start,end);c.strokeStyle=color;c.lineWidth=8
     c.shadowColor=color;c.shadowBlur=12;c.stroke();c.shadowBlur=0
 }
-function showGoalBanner(team, scorerName, scorerPfp){
+function showGoalBanner(team, scorerName, scorerPfp, scorerData){
     const color=team==="blue"?(settings.blueColor||"#00aaff"):(settings.orangeColor||"#ff6600")
     const teamName=team==="blue"?(settings.blueTeamName||"BLUE"):(settings.orangeTeamName||"ORANGE")
     const gw=document.getElementById("goalWord")
     const gs=document.getElementById("goalSub")
     const sc=document.getElementById("scorerCard")
-    const sn=document.getElementById("scorerName")
-    const sp=document.getElementById("scorerPfp")
     gw.style.color=color; gw.style.textShadow=`0 0 60px ${color}88`
     gw.textContent="¡GOL!"
     gs.textContent=teamName+" ANOTA"
-    if(sc && sn && scorerName){
-        sn.textContent=scorerName.toUpperCase()
-        sn.style.color=color
+    if(sc && scorerName){
+        const sn=document.getElementById("scorerName")
+        const st=document.getElementById("scorerTitle")
+        const sp=document.getElementById("scorerPfp")
+        const sb=document.getElementById("scorerBanner")
+        if(sn) sn.textContent=scorerName.toUpperCase()
+        if(sn) sn.style.color=color
+        // Fill pfp
         if(sp && scorerPfp){ sp.src=scorerPfp; sp.style.display="block" }
         else if(sp) sp.style.display="none"
-        sc.style.display="flex"
-        sc.style.borderColor=color+"55"
+        // Fill banner from playerMap
+        const pm=Object.values(playerMap).find(p=>p.name===scorerName||p.id===scorerName)
+        if(sb && pm && pm.banner) sb.style.backgroundImage=`url('${pm.banner}')`
+        if(st && pm && pm.title){ st.textContent=pm.title; st.style.color=pm.titleColor||"#aaa" }
+        sc.style.display="flex"; sc.style.borderColor=color+"55"
     } else if(sc){
         sc.style.display="none"
     }
@@ -588,6 +604,60 @@ function hexPath(cx,cy,r){
     ctx.closePath()
 }
 
+// ─── LUCKY BLOCKS ────────────────────────────────────────────────
+var _lbAng=0
+function drawLuckyBlocks(){
+    _lbAng+=0.02
+    luckyBlocks.forEach(function(lb){
+        if(!lb.active)return
+        var x=0,y=0
+        // positions match server
+        var positions=[
+            {x:W*0.25,y:WALL_T+55},{x:W*0.75,y:WALL_T+55},
+            {x:W*0.25,y:WALL_B-55},{x:W*0.75,y:WALL_B-55}
+        ]
+        var pos=positions[lb.id]||{x:W/2,y:H/2}
+        ctx.save()
+        ctx.translate(pos.x,pos.y)
+        ctx.rotate(_lbAng)
+        // Glow
+        ctx.shadowColor="#ffd700";ctx.shadowBlur=20
+        // Box
+        var sz=26
+        ctx.fillStyle="rgba(255,215,0,0.18)"
+        ctx.strokeStyle="#ffd700"
+        ctx.lineWidth=2.5
+        ctx.beginPath();ctx.rect(-sz/2,-sz/2,sz,sz);ctx.fill();ctx.stroke()
+        // Question mark
+        ctx.shadowBlur=0;ctx.fillStyle="#ffd700"
+        ctx.font="bold 18px 'Barlow Condensed',sans-serif"
+        ctx.textAlign="center";ctx.textBaseline="middle"
+        ctx.fillText("?",0,1)
+        ctx.restore()
+    })
+}
+
+function drawPunchEffects(){
+    punchEffects.forEach(function(e){
+        var t=e.life/0.35  // fade out
+        ctx.save()
+        ctx.globalAlpha=t*0.85
+        ctx.strokeStyle="#ff2222"
+        ctx.lineWidth=3+t*2
+        ctx.shadowColor="#ff0000";ctx.shadowBlur=18
+        ctx.beginPath();ctx.moveTo(e.x1,e.y1);ctx.lineTo(e.x2,e.y2);ctx.stroke()
+        // Arrow head at target
+        var ang=Math.atan2(e.y2-e.y1,e.x2-e.x1)
+        ctx.beginPath()
+        ctx.moveTo(e.x2,e.y2)
+        ctx.lineTo(e.x2-18*Math.cos(ang-0.4),e.y2-18*Math.sin(ang-0.4))
+        ctx.lineTo(e.x2-18*Math.cos(ang+0.4),e.y2-18*Math.sin(ang+0.4))
+        ctx.closePath();ctx.fillStyle="#ff2222";ctx.fill()
+        ctx.restore()
+    })
+}
+
+
 // Canvas scale
 function resize(){
     const scale=Math.min(window.innerWidth/W,window.innerHeight/H)
@@ -598,6 +668,8 @@ window.addEventListener("resize",resize);resize()
 // ─── MAIN RENDER LOOP ─────────────────────────────────────────────
 let lastTs=0,prevDashing=false
 function loop(ts){
+    // Update punch effects
+    for(var i=punchEffects.length-1;i>=0;i--){punchEffects[i].life-=1/60;if(punchEffects[i].life<=0)punchEffects.splice(i,1)}
     const dt=Math.min((ts-lastTs)/1000,0.05);lastTs=ts
     if(local.ready&&gamePhase==="playing"){
         if(local.dashing&&!prevDashing)spawnDashParticles(local.x,local.y)
@@ -619,7 +691,7 @@ function loop(ts){
     const dimTarget=gamePhase==="goal"||gamePhase==="over"?0.55:0
     dimAlpha+=(dimTarget-dimAlpha)*Math.min(1,dt*4)
     ctx.clearRect(0,0,W,H)
-    drawArena();drawBoostPads();drawTrails();drawParticles();drawBall()
+    drawArena();drawBoostPads();drawLuckyBlocks();drawTrails();drawParticles();drawBall();drawPunchEffects()
     if(dimAlpha>0.01){ctx.fillStyle=`rgba(0,0,0,${dimAlpha})`;ctx.fillRect(0,0,W,H)}
     getPlayers().forEach(p=>{
         const x=p.id===myId?(local.ready?local.x:p.x):(p.rx??p.x)
@@ -634,6 +706,25 @@ function loop(ts){
         ctx.save();ctx.textAlign="center"
         ctx.font="bold 160px 'Barlow Condensed','Segoe UI',sans-serif"
         ctx.fillStyle="rgba(255,255,255,0.08)";ctx.fillText(Math.ceil(kickoffTimer),W/2,H/2+60)
+        ctx.restore()
+    }
+    // Power HUD — show current power in bottom center near boost
+    if(myPower){
+        ctx.save()
+        ctx.font="bold 24px 'Barlow Condensed',sans-serif"
+        ctx.textAlign="center"
+        var icon=myPower==="freeze"?"❄️":myPower==="punch"?"👊":"?"
+        ctx.fillStyle="#ffd700"
+        ctx.shadowColor="#ffd700";ctx.shadowBlur=12
+        ctx.fillText(icon+" "+myPower.toUpperCase()+" [E]", W/2, H-18)
+        ctx.restore()
+    }
+    // Frozen ball tint
+    if(ballFrozen){
+        var bx=ball.x,by=ball.y,br=BALL_R
+        ctx.save();ctx.globalAlpha=0.55
+        ctx.beginPath();ctx.arc(bx,by,br+6,0,Math.PI*2)
+        ctx.fillStyle="#66ccff";ctx.shadowColor="#66ccff";ctx.shadowBlur=18;ctx.fill()
         ctx.restore()
     }
     requestAnimationFrame(loop)

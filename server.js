@@ -17,7 +17,7 @@ const GOAL_W=40,GOAL_H=200,GOAL_CY=H/2
 const GOAL_L={x:WALL_L-GOAL_W,y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const GOAL_R={x:WALL_R,y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const BALL_R=24,CAR_R=22,DT=1/60
-const ACCEL=900,FRICTION=0.88,MAX_SPD=580
+const ACCEL=900,FRICTION=0.965,MAX_SPD=580
 const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38
 const DASH_SPEED=MAX_SPD*1.3,DASH_DUR=0.16,DASH_CD=1.0
 const PADS=[
@@ -29,6 +29,16 @@ const PADS=[
     {x:W*.3,y:H*.3,type:"small",value:25},{x:W*.7,y:H*.3,type:"small",value:25},
     {x:W*.3,y:H*.7,type:"small",value:25},{x:W*.7,y:H*.7,type:"small",value:25},
 ]
+
+// ─── LUCKY BLOCKS (RUMBLE) ───────────────────────────────────────
+const LUCKY_BLOCKS=[
+    {id:0, x:W*0.25, y:WALL_T+55},   // top-left area
+    {id:1, x:W*0.75, y:WALL_T+55},   // top-right area
+    {id:2, x:W*0.25, y:WALL_B-55},   // bottom-left area
+    {id:3, x:W*0.75, y:WALL_B-55},   // bottom-right area
+]
+const POWERS=["freeze","punch"]
+const LB_RESPAWN=15  // seconds
 
 const rooms = {}
 
@@ -52,6 +62,7 @@ function makePlayer(id,d){
         x:team==="blue"?WALL_L+160:WALL_R-160, y:H/2,
         vx:0,vy:0,
         boost:33,dashing:false,dashTimer:0,dashCd:0,dashVx:0,dashVy:0,
+        power:null,powerCd:0,
         input:{},lastSeq:0
     }
 }
@@ -61,6 +72,7 @@ function makeRoom(){
         ball:{x:W/2,y:H/2,vx:0,vy:0,spin:0},
         pads:PADS.map(p=>({...p,active:true,timer:0})),
         scores:{blue:0,orange:0}, matchTime:300,
+        luckyBlocks:LUCKY_BLOCKS.map(b=>({...b,active:true,timer:0})),
         phase:"lobby", kickoffTimer:3, overtime:false,
         lastTouch:{blue:null,orange:null},
         settings:{
@@ -134,6 +146,8 @@ io.on("connection", socket => {
         room.matchTime=300;room.phase="kickoffCountdown";room.kickoffTimer=3
         room.scores={blue:0,orange:0};room.overtime=false;room._otTimer=0
         room.lastTouch={blue:null,orange:null}
+        room.luckyBlocks.forEach(b=>{b.active=true;b.timer=0})
+        room.players.forEach(p=>{p.power=null;p.powerCd=0})
         io.to(code).emit("gameStarted",{players:room.players,settings:room.settings})
     })
 
@@ -179,9 +193,14 @@ setInterval(()=>{
                 p.dashing=true;p.dashTimer=DASH_DUR;p.dashCd=DASH_CD
             }
             if(p.dashing){
-                const t=p.dashTimer/DASH_DUR
-                p.vx=p.dashVx*t;p.vy=p.dashVy*t
-                p.dashTimer-=dt;if(p.dashTimer<=0)p.dashing=false
+                // Keep full dash velocity during dash, then exit with momentum
+                p.vx=p.dashVx;p.vy=p.dashVy
+                p.dashTimer-=dt
+                if(p.dashTimer<=0){
+                    p.dashing=false
+                    // Exit velocity = 60% of dash speed so there's momentum
+                    p.vx=p.dashVx*0.6;p.vy=p.dashVy*0.6
+                }
             } else {
                 if(inp.w)p.vy-=ACCEL*dt;if(inp.s)p.vy+=ACCEL*dt
                 if(inp.a)p.vx-=ACCEL*dt;if(inp.d)p.vx+=ACCEL*dt
@@ -207,8 +226,37 @@ setInterval(()=>{
         })
         room.pads.forEach(pad=>{if(!pad.active&&--pad.timer<=0)pad.active=true})
 
+        // Lucky blocks
+        room.luckyBlocks.forEach(lb=>{
+            if(!lb.active){lb.timer-=dt*60;if(lb.timer<=0)lb.active=true;return}
+            room.players.forEach(p=>{
+                if(Math.hypot(p.x-lb.x,p.y-lb.y)<30){
+                    lb.active=false; lb.timer=LB_RESPAWN*60
+                    if(!p.power){
+                        p.power=POWERS[Math.floor(Math.random()*POWERS.length)]
+                        io.to(code).emit("powerPickup",{pid:p.id,power:p.power})
+                    }
+                }
+            })
+        })
+
+        // Power use — 'e' key
+        room.players.forEach(p=>{
+            const inp=p.input||{}
+            if(inp.power&&p.power&&!p.powerCd){
+                usePower(room,code,p)
+            }
+            if(p.powerCd>0)p.powerCd-=dt
+        })
+
         const b=room.ball
-        b.vx*=Math.pow(0.9940,dt*60);b.vy*=Math.pow(0.9940,dt*60)
+        // Frozen ball
+        if(b.frozen){
+            b._frozenTimer-=dt; b.vx=0; b.vy=0
+            if(b._frozenTimer<=0){b.frozen=false}
+        } else {
+            b.vx*=Math.pow(0.9940,dt*60);b.vy*=Math.pow(0.9940,dt*60)
+        }
         b.spin*=Math.pow(0.990,dt*60);b.x+=b.vx*dt;b.y+=b.vy*dt
 
         if(b.x-BALL_R<WALL_L){
@@ -236,6 +284,7 @@ setInterval(()=>{
                     const imp=Math.min(Math.max(200,-(1.4)*relV+cspd*0.6), 900)
                     b.vx+=nx*imp;b.vy+=ny*imp;b.spin+=nx*imp*0.05
                     room.lastTouch[p.team]=p.id  // track who last touched
+                    if(room.ball.frozen){room.ball.frozen=false;room.ball.vx=room.ball._frozenVx||0;room.ball.vy=room.ball._frozenVy||0}
                 }
             }
         })
@@ -277,29 +326,66 @@ function buildState(room){
             dashTimer:+(p.dashTimer||0).toFixed(3),
             dashCd:+(p.dashCd||0).toFixed(2),
             isBoosting:!!(p.input&&p.input.shift&&p.boost>0),
-            seq:p.lastSeq||0
+            seq:p.lastSeq||0,power:p.power||null
         })),
         ball:{x:Math.round(room.ball.x),y:Math.round(room.ball.y),spin:+room.ball.spin.toFixed(2)},
         pads:room.pads.map(p=>({active:p.active})),
+        luckyBlocks:room.luckyBlocks.map(b=>({id:b.id,active:b.active})),
+        ballFrozen:room.ball.frozen||false,
         scores:room.scores,matchTime:room.overtime?-Math.floor(room._otTimer||0):Math.ceil(room.matchTime),
         settings:room.settings,phase:room.phase,
         kickoffTimer:Math.ceil(room.kickoffTimer||0)
     }
 }
+function usePower(room,code,p){
+    const power=p.power
+    p.power=null; p.powerCd=0.5  // brief cooldown to prevent double-fire
+    const b=room.ball
+
+    if(power==="freeze"){
+        b.frozen=true; b._frozenTimer=3.5  // freeze for 3.5s
+        b._frozenVx=b.vx; b._frozenVy=b.vy
+        b.vx=0;b.vy=0
+        io.to(code).emit("powerUsed",{power:"freeze",pid:p.id})
+    }
+    else if(power==="punch"){
+        // Launch ball from player toward ball direction at high speed
+        const dx=b.x-p.x, dy=b.y-p.y, dist=Math.hypot(dx,dy)||1
+        const nx=dx/dist, ny=dy/dist
+        const spd=1400
+        b.vx=nx*spd; b.vy=ny*spd
+        b.frozen=false
+        io.to(code).emit("powerUsed",{power:"punch",pid:p.id,px:p.x,py:p.y,tx:b.x,ty:b.y})
+    }
+}
+
 function handleGoal(room,code,scorer){
     room.phase="goal"; room.scores[scorer]++
     room.settings.gameNum=(room.settings.gameNum||1)+1
-    // Freeze time at current value — don't reset it
     const frozenTime = room.matchTime
-    const scorerName=(room.players.find(p=>p.id===room.lastTouch[scorer])||{}).name||scorer
+    const wasOvertime = room.overtime
+    const scorerName=(room.players.find(p=>p.id===room.lastTouch[scorer])||{}).name||"Unknown"
     const scorerPfp=(room.players.find(p=>p.id===room.lastTouch[scorer])||{}).pfp||''
-    io.to(code).emit("goal",{scorer,scores:room.scores,settings:room.settings,scorerName,scorerPfp})
+    io.to(code).emit("goal",{scorer,scores:room.scores,settings:room.settings,scorerName,scorerPfp,overtime:wasOvertime})
     setTimeout(()=>{
-        reposition(room)
-        room.ball={x:W/2,y:H/2,vx:0,vy:0,spin:0}
-        room.pads.forEach(p=>{p.active=true;p.timer=0})
-        room.matchTime=frozenTime   // resume from where it was
-        room.phase="kickoffCountdown"; room.kickoffTimer=3
-        io.to(code).emit("kickoff",{scores:room.scores,settings:room.settings})
+        if(wasOvertime){
+            // Overtime goal = game over
+            room.phase="over"; room.overtime=false
+            io.to(code).emit("gameOver",room.scores)
+            setTimeout(()=>{
+                if(rooms[code]){
+                    rooms[code].phase="lobby"; rooms[code].overtime=false
+                    rooms[code].scores={blue:0,orange:0}; rooms[code].settings.gameNum=1
+                    io.to(code).emit("lobbyUpdate",{players:rooms[code].players,settings:rooms[code].settings})
+                }
+            },6000)
+        } else {
+            reposition(room)
+            room.ball={x:W/2,y:H/2,vx:0,vy:0,spin:0}
+            room.pads.forEach(p=>{p.active=true;p.timer=0})
+            room.matchTime=frozenTime
+            room.phase="kickoffCountdown"; room.kickoffTimer=3
+            io.to(code).emit("kickoff",{scores:room.scores,settings:room.settings})
+        }
     },3000)
 }
