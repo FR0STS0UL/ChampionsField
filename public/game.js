@@ -206,23 +206,7 @@ var myPower=null  // current power held
 var ballFrozen=false
 var punchEffects=[]  // [{x1,y1,x2,y2,life}]
 var plungerEffects=[] // [{x1,y1,x2,y2,life,progress}]
-var grapplingEffects=[] // [{x1,y1,x2,y2,life,pid}] — hook line from player to ball
-
-// Called by game.html socket handler when powerUsed event fires for grappling_hook
-function spawnGrapplingEffect(pid, px, py, tx, ty){
-    grapplingEffects.push({pid:pid, x1:px, y1:py, x2:tx, y2:ty, life:0.6})
-    // Spawn green burst particles at ball
-    spawnParts(tx, ty, "#00ff88", 12, 200, 0.5, 3)
-}
-
-// onPowerUsed — called by game.html socket "powerUsed" handler
-// game.html should add: else if(d.power==="grappling_hook") onPowerUsed(d)
-var onPowerUsed = function(d){
-    if(d.power==="grappling_hook"){
-        spawnGrapplingEffect(d.pid, d.px, d.py, d.tx, d.ty)
-        if(d.pid===myId){ myPower=null }
-    }
-}
+var grapplingEffects=[] // [{pid,x1,y1,x2,y2,life}] — hook player→ball
 var spikesPlayers={} // pid -> {active, spiked}
 var luckyBlocks=[]
 
@@ -701,24 +685,21 @@ function drawGrapplingEffects(){
         var t=Math.max(0,e.life/0.6)
         ctx.save()
         ctx.globalAlpha=t*0.9
-        // Chain/rope line toward ball
         ctx.setLineDash([8,5])
         ctx.strokeStyle="#00ff88"
         ctx.lineWidth=3
         ctx.shadowColor="#00ff88";ctx.shadowBlur=16
         ctx.beginPath();ctx.moveTo(e.x1,e.y1);ctx.lineTo(e.x2,e.y2);ctx.stroke()
         ctx.setLineDash([])
-        // Hook tip at ball end
-        var ang=Math.atan2(e.y2-e.y1,e.x2-e.x1)
-        ctx.translate(e.x2,e.y2);ctx.rotate(ang)
         ctx.shadowBlur=22;ctx.fillStyle="#00ff88"
-        ctx.beginPath();ctx.arc(0,0,7,0,Math.PI*2);ctx.fill()
+        ctx.beginPath();ctx.arc(e.x2,e.y2,7,0,Math.PI*2);ctx.fill()
         ctx.fillStyle="#ffffff"
-        ctx.beginPath();ctx.arc(0,0,3,0,Math.PI*2);ctx.fill()
+        ctx.beginPath();ctx.arc(e.x2,e.y2,3,0,Math.PI*2);ctx.fill()
         ctx.restore()
     })
 }
 
+function drawSpikesOnCar(p, x, y){
     var sdata=spikesPlayers[p.id]
     if(!sdata||!sdata.active)return
     ctx.save();ctx.translate(x,y)
