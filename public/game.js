@@ -16,8 +16,8 @@ const GOAL_R={x:WALL_R,       y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const BALL_R=24,CAR_R=22
 
 // Physics — for client-side prediction only (mirrors host.js exactly)
-const ACCEL=900,FRICTION=0.982,MAX_SPD=580
-const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38,BOOST_REGEN=0  // no auto-regen
+const ACCEL=600,FRICTION=0.978,MAX_SPD=420
+const BOOST_ACCEL=1000,BOOST_MAX=680,BOOST_DRAIN=38,BOOST_REGEN=0  // no auto-regen
 const DASH_SPEED=MAX_SPD*1.3,DASH_DUR=0.16,DASH_CD=1.0
 
 // ─── RENDER STATE — var so game.html bootstrap can write these globals ──────
@@ -702,10 +702,67 @@ function drawSpikesOnCar(p, x, y){
 }
 
 
-// Canvas scale
+// ─── CAMERA ─────────────────────────────────────────────────────
+var cam={x:W/2,y:H/2,zoom:1}
+var camTarget={x:W/2,y:H/2,zoom:1}
+
+function updateCamera(dt){
+    const me=playerMap[myId]
+    // Focus point: midpoint between local player and ball, biased toward ball
+    var focX=W/2, focY=H/2
+    if(me&&local.ready){
+        var px=local.x, py=local.y
+        var bx=ball.x, by=ball.y
+        // Weight: 40% player, 60% ball
+        focX=px*0.4+bx*0.6
+        focY=py*0.4+by*0.6
+    } else if(me){
+        focX=me.x*0.4+ball.x*0.6
+        focY=me.y*0.4+ball.y*0.6
+    }
+
+    // Zoom: zoom out when player and ball are far apart
+    var viewW=window.innerWidth, viewH=window.innerHeight
+    var baseZoom=Math.min(viewW/W,viewH/H)
+
+    var dist=0
+    if(me){
+        var dpx=local.ready?local.x:me.x
+        var dpy=local.ready?local.y:me.y
+        dist=Math.hypot(dpx-ball.x,dpy-ball.y)
+    }
+    // zoom range: 1.0x (close) to 0.65x (far), based on distance
+    var zoomFactor=Math.max(0.65,1.0-dist/2200)
+    camTarget.zoom=baseZoom*zoomFactor
+
+    // Clamp focus so we don't show outside the field (with padding)
+    var halfW=(viewW/2)/camTarget.zoom
+    var halfH=(viewH/2)/camTarget.zoom
+    var pad=30
+    focX=Math.max(WALL_L-pad+halfW, Math.min(WALL_R+pad-halfW, focX))
+    focY=Math.max(WALL_T-pad+halfH, Math.min(WALL_B+pad-halfH, focY))
+    camTarget.x=focX; camTarget.y=focY
+
+    // Smooth camera
+    var sp=1-Math.pow(0.01,dt*7)
+    cam.x+=(camTarget.x-cam.x)*sp
+    cam.y+=(camTarget.y-cam.y)*sp
+    cam.zoom+=(camTarget.zoom-cam.zoom)*(1-Math.pow(0.01,dt*5))
+}
+
+function applyCameraTransform(){
+    var vw=canvas.width, vh=canvas.height
+    ctx.setTransform(cam.zoom,0,0,cam.zoom,
+        vw/2-cam.x*cam.zoom,
+        vh/2-cam.y*cam.zoom)
+}
+
+// Canvas — full window size, camera does the zooming
 function resize(){
-    const scale=Math.min(window.innerWidth/W,window.innerHeight/H)
-    canvas.style.width=(W*scale)+"px";canvas.style.height=(H*scale)+"px"
+    canvas.width=window.innerWidth
+    canvas.height=window.innerHeight
+    canvas.style.width=window.innerWidth+"px"
+    canvas.style.height=window.innerHeight+"px"
 }
 window.addEventListener("resize",resize);resize()
 
@@ -718,7 +775,6 @@ function loop(ts){
     for(var i=punchEffects.length-1;i>=0;i--){punchEffects[i].life-=dt;if(punchEffects[i].life<=0)punchEffects.splice(i,1)}
     for(var i=plungerEffects.length-1;i>=0;i--){
         plungerEffects[i].life-=dt
-        // Update rope end to current ball position while active
         plungerEffects[i].x2=ball.x; plungerEffects[i].y2=ball.y
         if(plungerEffects[i].life<=0)plungerEffects.splice(i,1)
     }
@@ -737,14 +793,22 @@ function loop(ts){
         if(p.id!==myId&&p.dashing&&!p._wasDashing)spawnDashParticles(p.rx,p.ry)
         p._wasDashing=p.dashing
         if(p.id===myId)p.dashCd=local.ready?local.dashCd:(p.dashCd||0)
-        // Update plunger rope origin to caster's position
         plungerEffects.forEach(function(e){if(e.pid===p.id){e.x1=p.id===myId?(local.ready?local.x:p.x):(p.rx??p.x);e.y1=p.id===myId?(local.ready?local.y:p.y):(p.ry??p.y)}})
     })
     updateParticles(dt);updateTrails(dt)
+    updateCamera(dt)
     ballAngle+=(ball.spin||0)*dt*0.5+dt*0.8;padAng+=dt*1.6
     const dimTarget=gamePhase==="goal"||gamePhase==="over"?0.55:0
     dimAlpha+=(dimTarget-dimAlpha)*Math.min(1,dt*4)
-    ctx.clearRect(0,0,W,H)
+
+    // Clear full canvas
+    ctx.setTransform(1,0,0,1,0,0)
+    ctx.clearRect(0,0,canvas.width,canvas.height)
+    ctx.fillStyle="#050810";ctx.fillRect(0,0,canvas.width,canvas.height)
+
+    // Apply camera
+    applyCameraTransform()
+
     drawArena();drawBoostPads();drawLuckyBlocks();drawTrails();drawParticles()
     drawPlungerEffects()
     drawBall()
@@ -753,12 +817,15 @@ function loop(ts){
         ctx.save();ctx.globalAlpha=0.55
         ctx.beginPath();ctx.arc(ball.x,ball.y,BALL_R+6,0,Math.PI*2)
         ctx.fillStyle="#66ccff";ctx.shadowColor="#66ccff";ctx.shadowBlur=18;ctx.fill()
-        // Ice crystal particles occasionally
         if(Math.random()<0.3)spawnParts(ball.x+(Math.random()-.5)*20,ball.y+(Math.random()-.5)*20,"#aaeeff",1,30,0.6,2)
         ctx.restore()
     }
     drawPunchEffects()
-    if(dimAlpha>0.01){ctx.fillStyle=`rgba(0,0,0,${dimAlpha})`;ctx.fillRect(0,0,W,H)}
+    if(dimAlpha>0.01){
+        ctx.save();ctx.setTransform(1,0,0,1,0,0)
+        ctx.fillStyle=`rgba(0,0,0,${dimAlpha})`;ctx.fillRect(0,0,canvas.width,canvas.height)
+        ctx.restore();applyCameraTransform()
+    }
     getPlayers().forEach(p=>{
         const x=p.id===myId?(local.ready?local.x:p.x):(p.rx??p.x)
         const y=p.id===myId?(local.ready?local.y:p.y):(p.ry??p.y)
@@ -768,28 +835,29 @@ function loop(ts){
         const boosting=p.id===myId?(local.ready&&getInput().shift&&local.boost>0):p.isBoosting
         drawSpikesOnCar(p,x,y)
         drawCar(p,x,y,vx,vy,dashing,boosting)
-        // Spikes: emit sparks when ball is stuck
         var sdata=spikesPlayers[p.id]
         if(sdata&&sdata.active&&sdata.spiked&&Math.random()<0.4){
             spawnParts(x+(Math.random()-.5)*30,y+(Math.random()-.5)*30,"#cccccc",2,80,0.35,2)
         }
     })
     if(gamePhase==="kickoffCountdown"&&kickoffTimer>0){
-        ctx.save();ctx.textAlign="center"
+        // Kickoff counter draws in screen space
+        ctx.save();ctx.setTransform(1,0,0,1,0,0)
+        ctx.textAlign="center"
         ctx.font="bold 160px 'Barlow Condensed','Segoe UI',sans-serif"
-        ctx.fillStyle="rgba(255,255,255,0.08)";ctx.fillText(Math.ceil(kickoffTimer),W/2,H/2+60)
-        ctx.restore()
+        ctx.fillStyle="rgba(255,255,255,0.08)";ctx.fillText(Math.ceil(kickoffTimer),canvas.width/2,canvas.height/2+60)
+        ctx.restore();applyCameraTransform()
     }
-    // Power HUD
+    // HUD draws in screen space (reset transform)
+    ctx.setTransform(1,0,0,1,0,0)
     if(myPower){
-        ctx.save()
         ctx.font="bold 24px 'Barlow Condensed',sans-serif"
         ctx.textAlign="center"
         var icon=myPower==="freeze"?"❄️":myPower==="punch"?"👊":myPower==="plunger"?"🪠":myPower==="spikes"?"⚙️":"?"
         var col=myPower==="plunger"?"#cc44ff":myPower==="spikes"?"#aaaaaa":"#ffd700"
         ctx.fillStyle=col;ctx.shadowColor=col;ctx.shadowBlur=12
-        ctx.fillText(icon+" "+myPower.toUpperCase()+" [E]", W/2, H-18)
-        ctx.restore()
+        ctx.fillText(icon+" "+myPower.toUpperCase()+" [E]",canvas.width/2,canvas.height-18)
+        ctx.shadowBlur=0
     }
     requestAnimationFrame(loop)
 }

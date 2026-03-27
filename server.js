@@ -17,8 +17,8 @@ const GOAL_W=40,GOAL_H=200,GOAL_CY=H/2
 const GOAL_L={x:WALL_L-GOAL_W,y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const GOAL_R={x:WALL_R,y:GOAL_CY-GOAL_H/2,w:GOAL_W,h:GOAL_H}
 const BALL_R=24,CAR_R=22,DT=1/60
-const ACCEL=900,FRICTION=0.982,MAX_SPD=580
-const BOOST_ACCEL=1400,BOOST_MAX=860,BOOST_DRAIN=38
+const ACCEL=600,FRICTION=0.978,MAX_SPD=420
+const BOOST_ACCEL=1000,BOOST_MAX=680,BOOST_DRAIN=38
 const DASH_SPEED=MAX_SPD*1.3,DASH_DUR=0.16,DASH_CD=1.0
 const PADS=[
     {x:180,y:180,type:"big",value:100},{x:W-180,y:180,type:"big",value:100},
@@ -240,12 +240,14 @@ setInterval(()=>{
             })
         })
 
-        // Power use — 'e' key
+        // Power use — 'e' key, edge-detect so holding E doesn't re-fire
         room.players.forEach(p=>{
             const inp=p.input||{}
-            if(inp.power&&p.power&&!p.powerCd){
+            const powerPressed=!!inp.power
+            if(powerPressed&&!p._prevPower&&p.power&&!p.powerCd){
                 usePower(room,code,p)
             }
+            p._prevPower=powerPressed
             if(p.powerCd>0)p.powerCd-=dt
             // Spikes timer
             if(p.spikes){
