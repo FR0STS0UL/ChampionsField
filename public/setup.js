@@ -1,84 +1,125 @@
-const socket = io();
-const input = document.getElementById("pfp-input");
-const preview = document.getElementById("pfp-preview");
+// No socket needed in the menu — room is created on first joinLobby
 
-// CONFIGURACIÓN DE NOMBRES ESPECIALES
 const SPECIAL_TITLES = {
-    "Frost": { title: "DEVELOPER", color: "#ff0000" },
-    "Matias": { title: "GOAT", color: "#00ff00" },
-    "Tester": { title: "BETA TESTER", color: "#55ffff" }
-};
+    "Frost":  { title:"DEVELOPER",   color:"#ff1111" },
+    "Matias": { title:"GOAT",         color:"#00ff66" },
+    "Tester": { title:"BETA TESTER",  color:"#55ffff" },
+}
 
 let player = {
-    name: "Jugador",
-    title: "ROOKIE",
-    titleColor: "#aaaaaa",
-    pfp: "assets/default_pfp.png",
-    banner: "assets/banners/default.png"
-};
+    name:"Jugador", title:"ROOKIE", titleColor:"#aaaaaa",
+    pfp:"assets/default_pfp.png",
+    banner:"assets/banners/Default.png",
+    decal:null, boostTrail:null,
+    team:"blue"
+}
 
-function checkSpecialTitle() {
-    const name = document.getElementById("username").value.trim();
-    const titleSelect = document.getElementById("player-title");
-   
-    if (SPECIAL_TITLES[name]) {
-        player.title = SPECIAL_TITLES[name].title;
-        player.titleColor = SPECIAL_TITLES[name].color;
-        titleSelect.disabled = true; // Bloqueamos el select si es especial
+// ─── LOAD SAVED DATA ─────────────────────────────────────────────
+const saved = JSON.parse(localStorage.getItem("playerData")||"null")
+if(saved){
+    player = { ...player, ...saved }
+    applyLoaded()
+}
+
+function applyLoaded(){
+    const el = id => document.getElementById(id)
+    if(player.name && el("username")) el("username").value = player.name
+    if(player.banner && el("banner-select")){
+        const file = player.banner.split("/").pop()
+        const sel  = el("banner-select")
+        for(let i=0;i<sel.options.length;i++) if(sel.options[i].value===file){sel.selectedIndex=i;break}
+    }
+    if(player.pfp && player.pfp.startsWith("data:") && el("pfp-preview"))
+        el("pfp-preview").src = player.pfp
+    renderPreview()
+    // Garage selections are restored inline in index.html
+}
+
+// ─── PFP ─────────────────────────────────────────────────────────
+const pfpInput = document.getElementById("pfp-input")
+if(pfpInput){
+    pfpInput.addEventListener("change", e => {
+        const r = new FileReader()
+        r.onload = () => {
+            player.pfp = r.result
+            document.getElementById("pfp-preview").src = r.result
+        }
+        r.readAsDataURL(e.target.files[0])
+    })
+}
+
+// ─── PROFILE PREVIEWS ────────────────────────────────────────────
+function checkSpecialTitle(){
+    const name = document.getElementById("username").value.trim()
+    const sel  = document.getElementById("player-title")
+    if(SPECIAL_TITLES[name]){
+        player.title      = SPECIAL_TITLES[name].title
+        player.titleColor = SPECIAL_TITLES[name].color
+        sel.disabled = true
     } else {
-        titleSelect.disabled = false;
-        updateTitlePreview();
+        sel.disabled = false
+        updateTitlePreview()
     }
-    renderPreview();
+    renderPreview()
 }
 
-function updateTitlePreview() {
-    const rawValue = document.getElementById("player-title").value;
-    const [name, color] = rawValue.split("|");
-    player.title = name;
-    player.titleColor = color;
-    renderPreview();
+function updateTitlePreview(){
+    const [name,color] = document.getElementById("player-title").value.split("|")
+    player.title      = name
+    player.titleColor = color
+    renderPreview()
 }
 
-function previewBanner() {
-    player.banner = "assets/banners/" + document.getElementById("banner-select").value;
-    renderPreview();
+function previewBanner(file){
+    // accepts filename like "Default.png" or full path
+    if(!file) return
+    player.banner = file.includes("/") ? file : "assets/banners/" + file
+    saveToLocalStorage()
 }
 
-function renderPreview() {
-    const titleDiv = document.getElementById("title-preview");
-    titleDiv.innerText = player.title;
-    titleDiv.style.color = player.titleColor;
-    document.getElementById("banner-preview-img").src = player.banner;
+function renderPreview(){
+    const tp = document.getElementById("title-preview")
+    const bi = document.getElementById("banner-preview-img")
+    if(tp){ tp.innerText = player.title; tp.style.color = player.titleColor }
+    if(bi) bi.src = player.banner
 }
 
-input.addEventListener("change", (e) => {
-    const reader = new FileReader();
-    reader.onload = function () {
-        preview.src = reader.result;
-        player.pfp = reader.result;
-    }
-    reader.readAsDataURL(e.target.files[0]);
-});
-
-function saveToLocalStorage(team = "red") {
-    player.name = document.getElementById("username").value.trim() || "Jugador";
-    player.team = team;
-    localStorage.setItem("playerData", JSON.stringify(player));
+// ─── GARAGE ──────────────────────────────────────────────────────
+function previewDecal(val){
+    player.decal = val || null
+    saveToLocalStorage()
+}
+function previewBoost(val){
+    player.boostTrail = val || null
+    saveToLocalStorage()
 }
 
-function createRoom() {
-    saveToLocalStorage();
-    socket.emit("createRoom");
+// ─── SAVE ────────────────────────────────────────────────────────
+function saveToLocalStorage(team = player.team || "blue"){
+    const usernameEl = document.getElementById("username")
+    player.name = (usernameEl ? usernameEl.value.trim() : player.name) || "Jugador"
+    player.team = team
+    localStorage.setItem("playerData", JSON.stringify(player))
 }
 
-socket.on("roomCreated", (code) => {
-    window.location.href = "lobby.html?room=" + code;
-});
+// ─── ROOM ACTIONS ────────────────────────────────────────────────
+function createRoom(){
+    saveToLocalStorage()
+    // Generate code locally — server creates the room on first joinLobby
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    const code  = Array.from({length:5}, () => chars[Math.floor(Math.random()*36)]).join("")
+    window.location.href = "lobby.html?room=" + code
+}
 
-function joinRoom() {
-    const code = document.getElementById("roomCode").value.trim();
-    if (!code) return alert("Escribe un código");
-    saveToLocalStorage();
-    window.location.href = "lobby.html?room=" + code;
+function joinRoom(){
+    const codeEl = document.getElementById("roomCode")
+    const code   = (codeEl ? codeEl.value.trim() : "").toUpperCase()
+    if(!code) return alert("Escribe un código de sala")
+    saveToLocalStorage()
+    window.location.href = "lobby.html?room=" + code
+}
+
+function startFreePlay(){
+    saveToLocalStorage()
+    window.location.href = "game.html?free=1"
 }

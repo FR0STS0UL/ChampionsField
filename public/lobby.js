@@ -1,57 +1,136 @@
+// ═══════════════════════════════════════════════════════════════
+//  CHAMPIONS FIELD — LOBBY.JS  (socket.io, no WebRTC)
+// ═══════════════════════════════════════════════════════════════
 const socket = io()
 const params = new URLSearchParams(window.location.search)
-const room = params.get("room")
+const room   = params.get("room")
+document.getElementById("roomCode").textContent = room
 
-document.getElementById("roomCode").innerText = room
+const pd = JSON.parse(localStorage.getItem("playerData")||"{}")
+if(!pd.team) pd.team = "blue"
 
-// Al entrar al lobby, nos unimos para que los demás nos vean
-const playerData = JSON.parse(localStorage.getItem("playerData"))
-socket.emit("joinGame", { room: room, ...playerData })
+let amHost=false, myId=null
+let currentPlayers=[], currentSettings={}
 
-function joinTeam(team) {
-    // Guardar elección localmente
-    const data = JSON.parse(localStorage.getItem("playerData"));
-    data.team = team;
-    localStorage.setItem("playerData", JSON.stringify(data));
+socket.on("connect", ()=>{
+    myId = socket.id
+    socket.emit("joinLobby",{room,...pd})
+})
 
-    // Avisar al servidor
-    socket.emit("joinTeam", {
-        room: room,
-        team: team
-    });
+socket.on("lobbyJoined", ({myId:id, players, settings, phase})=>{
+    myId = id
+
+    // If game already started, go straight to game page
+    if(phase === "playing" || phase === "kickoffCountdown" || phase === "goal"){
+        window.location.href = `game.html?room=${room}`
+        return
+    }
+
+    amHost = (id === players[0]?.id)
+    currentPlayers=players; currentSettings=settings
+
+    document.getElementById("startBtn").style.display = amHost ? "block" : "none"
+    const hostNote = document.getElementById("host-note")
+    if(hostNote) hostNote.style.display = amHost ? "none" : "block"
+
+    applySettings(settings)
+    renderAllPlayers(players)
+})
+
+socket.on("lobbyUpdate", ({players, settings})=>{
+    currentPlayers=players; currentSettings=settings
+    amHost = (myId === players[0]?.id)
+    document.getElementById("startBtn").style.display = amHost ? "block" : "none"
+    const hostNote = document.getElementById("host-note")
+    if(hostNote) hostNote.style.display = amHost ? "none" : "block"
+    applySettings(settings)
+    renderAllPlayers(players)
+})
+
+socket.on("roomError", msg=>{
+    const el=document.getElementById("lobby-error")
+    if(el){el.textContent="⚠ "+msg; el.style.display="block"}
+})
+
+socket.on("gameStarted", ()=>{
+    socket.disconnect()
+    setTimeout(()=>{ window.location.href=`game.html?room=${room}` }, 200)
+})
+
+function joinTeam(team){
+    const data=JSON.parse(localStorage.getItem("playerData")||"{}")
+    data.team=team
+    localStorage.setItem("playerData",JSON.stringify(data))
+    socket.emit("joinTeam",{room,team})
 }
 
-// El servidor envía 'playerInfoUpdate' con la lista de todos los jugadores
-socket.on("playerInfoUpdate", (players) => {
-    const redPlayers = players.filter(p => p.team === "red");
-    const bluePlayers = players.filter(p => p.team === "blue");
+function pushSettings(){
+    if(!amHost) return
+    const s=readSettings()
+    socket.emit("updateSettings",{room,settings:s})
+    applyPreview(s)
+}
 
-    renderTeam("redPlayers", redPlayers);
-    renderTeam("bluePlayers", bluePlayers);
-});
+function readSettings(){
+    const v=id=>{const el=document.getElementById(id);return el?el.value:""}
+    return {
+        blueTeamName:  v("cfg-bluename")||"BLUE",
+        orangeTeamName:v("cfg-orangename")||"ORANGE",
+        blueColor:     v("cfg-bluecolor"),
+        orangeColor:   v("cfg-orangecolor"),
+        seriesTitle:   v("cfg-series")||"CHAMPIONS FIELD",
+        gameNum:       parseInt(v("cfg-gamenum"))||1,
+        bestOf:        parseInt(v("cfg-bestof"))||7,
+    }
+}
 
-function renderTeam(id, players) {
-    const div = document.getElementById(id);
-    if (!div) return;
-    div.innerHTML = "";
+function applySettings(s){
+    const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val}
+    set("cfg-bluename",s.blueTeamName); set("cfg-orangename",s.orangeTeamName)
+    set("cfg-bluecolor",s.blueColor);   set("cfg-orangecolor",s.orangeColor)
+    set("cfg-series",s.seriesTitle);    set("cfg-gamenum",s.gameNum); set("cfg-bestof",s.bestOf)
+    ;["cfg-bluename","cfg-orangename","cfg-bluecolor","cfg-orangecolor","cfg-series","cfg-gamenum","cfg-bestof"]
+        .forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=!amHost})
+    applyPreview(s)
+}
 
-    players.forEach(p => {
-        const card = document.createElement("div");
-        card.className = "playerCard";
-        
-        card.innerHTML = `
+function applyPreview(s){
+    const t=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v}
+    const c=(id,p,v)=>{const el=document.getElementById(id);if(el)el.style[p]=v}
+    t("sbp-blue-name",s.blueTeamName); t("sbp-orange-name",s.orangeTeamName)
+    t("sbp-series-text",s.seriesTitle); t("sbp-game-text","GAME "+s.gameNum); t("sbp-bo-text","BEST OF "+s.bestOf)
+    t("blue-label",s.blueTeamName);    t("orange-label",s.orangeTeamName)
+    c("sbp-blue-bar","background",s.blueColor);  c("sbp-orange-bar","background",s.orangeColor)
+    c("blue-label","color",s.blueColor);          c("orange-label","color",s.orangeColor)
+    c("blue-dot","background",s.blueColor);       c("blue-dot","boxShadow",`0 0 8px ${s.blueColor}`)
+    c("orange-dot","background",s.orangeColor);   c("orange-dot","boxShadow",`0 0 8px ${s.orangeColor}`)
+}
+
+function renderAllPlayers(players){
+    renderTeam("bluePlayers",  players.filter(p=>p.team==="blue"))
+    renderTeam("orangePlayers",players.filter(p=>p.team==="orange"))
+}
+
+function renderTeam(divId,players){
+    const div=document.getElementById(divId); if(!div) return
+    div.innerHTML=""
+    players.forEach(p=>{
+        const card=document.createElement("div"); card.className="playerCard"
+        const isMe = p.id===myId
+        const tc = p.titleColor||'#aaa'
+        card.innerHTML=`
             <div class="avatar-container">
-                <img src="${p.pfp}" class="pfp">
+                <img src="${p.pfp||'assets/default_pfp.png'}" class="pfp" onerror="this.src='assets/default_pfp.png'">
             </div>
-            <div class="info-container" style="background-image: url('${p.banner}')">
-                <div class="name">${p.name}</div>
-                <div class="playerTitle" style="color: ${p.titleColor}">${p.title}</div>
-            </div>
-        `;
-        div.appendChild(card);
-    });
+            <div class="info-container" style="background-image:url('${p.banner||'assets/banners/Default.png'}')">
+                <div class="name">${p.name||"Jugador"}${isMe?' <span style="color:#ffd700;font-size:9px">TÚ</span>':''}</div>
+                <div class="playerTitle" style="color:${tc};text-shadow:0 0 8px ${tc},0 0 20px ${tc}">${p.title||""}</div>
+            </div>`
+        div.appendChild(card)
+    })
 }
 
-function startGame() {
-    window.location.href = "game.html?room=" + room;
+function startGame(){
+    if(!amHost) return
+    socket.emit("startGame",{room})
 }
