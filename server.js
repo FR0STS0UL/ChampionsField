@@ -448,14 +448,13 @@ function usePower(room,code,p){
         // Launch player toward ball — Rocket League grappling hook style
         const dx=b.x-p.x, dy=b.y-p.y, dist=Math.hypot(dx,dy)||1
         const nx=dx/dist, ny=dy/dist
-        // Give player a massive impulse toward the ball
         const hookSpd=900
         p.vx=nx*hookSpd; p.vy=ny*hookSpd
-        p._grapplingTimer=0.6  // lunge duration
+        p._grapplingTimer=0.6
         b.frozen=false
         io.to(code).emit("powerUsed",{power:"grappling_hook",pid:p.id,px:p.x,py:p.y,tx:b.x,ty:b.y})
     }
-
+    else if(power==="spikes"){
         // Activate spikes — ball sticks on next contact
         p.spikes=true; p.spikeTimer=8; p._spikedBall=false
         io.to(code).emit("powerUsed",{power:"spikes",pid:p.id})
